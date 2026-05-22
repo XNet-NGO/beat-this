@@ -49,7 +49,10 @@ fun MainScreen(vm: MainViewModel) {
                 ) }
                 TimelineView(demoTracks, demoClips)
             }
-            StudioView.PIANO_ROLL -> PianoRollView(remember { Pattern(1) }, modifier = Modifier.fillMaxSize())
+            StudioView.PIANO_ROLL -> {
+                val pattern by vm.currentPattern.collectAsState()
+                PianoRollView(pattern, modifier = Modifier.fillMaxSize())
+            }
             StudioView.SEQUENCER -> StepSequencerView(remember {
                 DrumPattern(1, tracks = mutableListOf(
                     DrumTrackRow("Kick", 36), DrumTrackRow("Snare", 38), DrumTrackRow("HiHat", 42),

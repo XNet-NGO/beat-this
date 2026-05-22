@@ -156,13 +156,31 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     // --- COMPOSE ---
 
+    /** Shared pattern that piano roll displays */
+    private val _currentPattern = MutableStateFlow(com.beatthis.engine.midi.Pattern(id = 1, name = "MIDIjourney"))
+    val currentPattern = _currentPattern.asStateFlow()
+
+    fun loadToPianoRoll(notes: List<com.beatthis.engine.midi.Note>) {
+        val pattern = _currentPattern.value
+        pattern.notes.clear()
+        pattern.notes.addAll(notes)
+        // Calculate length in bars from the notes
+        val maxTick = notes.maxOfOrNull { it.startTick + it.durationTicks } ?: 0
+        pattern.lengthBars = ((maxTick / com.beatthis.engine.midi.Pattern.TICKS_PER_BAR) + 1).coerceAtLeast(4)
+        _currentPattern.value = pattern.copy(id = pattern.id) // trigger recompose
+        _status.value = "✓ Loaded ${notes.size} notes to Piano Roll"
+    }
+
     fun askComposition(prompt: String) {
         val msgs = _compositionMessages.value.toMutableList()
         msgs.add(prompt to true)
         _compositionMessages.value = msgs
         viewModelScope.launch {
             try {
-                val r = client.chatCompletions(ChatRequest(model = "midijourney", messages = listOf(Message("user", prompt))))
+                val r = client.chatCompletions(ChatRequest(model = "openai", messages = listOf(
+                    Message("system", "You are MIDIjourney, an expert AI music composition assistant. Help with chord progressions, melodies, song structures, arrangements, and music theory. Give specific, actionable musical advice. Use standard notation (e.g. Am7, Cmaj7). Be concise."),
+                    Message("user", prompt)
+                )))
                 val reply = r.choices.firstOrNull()?.message?.content ?: "No response"
                 _compositionMessages.value = _compositionMessages.value.toMutableList().also { it.add(reply to false) }
             } catch (e: Exception) {
