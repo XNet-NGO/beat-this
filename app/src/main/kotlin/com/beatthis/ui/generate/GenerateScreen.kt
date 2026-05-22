@@ -231,41 +231,68 @@ fun GenerateScreen(vm: MainViewModel) {
 
 @Composable
 private fun StemCard(stem: Stem, vm: MainViewModel, isPlaying: Boolean) {
+    val audioFile = remember(stem.id) { vm.repo.audioFile(stem) }
+    val waveform = remember(stem.id) { com.beatthis.ui.waveform.extractWaveformSamples(audioFile, 200) }
+
     Card(
         Modifier.fillMaxWidth(),
         colors = if (isPlaying) CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
         else CardDefaults.cardColors()
     ) {
-        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                when (stem.type) {
-                    StemType.INSTRUMENTAL -> Icons.Default.MusicNote
-                    StemType.VOCALS -> Icons.Default.RecordVoiceOver
-                    StemType.SPEECH -> Icons.Default.VoiceChat
-                },
-                null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary
-            )
-            Spacer(Modifier.width(10.dp))
-            Column(Modifier.weight(1f)) {
-                Text(stem.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(
-                    buildString {
-                        append("${stem.sizeBytes / 1024}KB")
-                        stem.duration?.let { append(" | ${it}s") }
-                        stem.seed?.let { if (it != 0L) append(" | seed:$it") }
+        Column(Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    when (stem.type) {
+                        StemType.INSTRUMENTAL -> Icons.Default.MusicNote
+                        StemType.VOCALS -> Icons.Default.RecordVoiceOver
+                        StemType.SPEECH -> Icons.Default.VoiceChat
                     },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary
+                )
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(stem.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        buildString {
+                            append("${stem.sizeBytes / 1024}KB")
+                            stem.duration?.let { append(" | ${it}s") }
+                            stem.seed?.let { if (it != 0L) append(" | seed:$it") }
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                IconButton(onClick = { if (isPlaying) vm.stopPlayback() else vm.playStem(stem) }) {
+                    Icon(if (isPlaying) Icons.Default.Stop else Icons.Default.PlayArrow, null)
+                }
+                IconButton(onClick = { vm.regenerate(stem) }) {
+                    Icon(Icons.Default.Refresh, null)
+                }
+                IconButton(onClick = { vm.deleteStem(stem.id) }) {
+                    Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error)
+                }
+            }
+
+            // Waveform
+            if (waveform.isNotEmpty()) {
+                Spacer(Modifier.height(4.dp))
+                com.beatthis.ui.waveform.WaveformView(
+                    samples = waveform,
+                    modifier = Modifier.fillMaxWidth().height(40.dp),
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
-            IconButton(onClick = { if (isPlaying) vm.stopPlayback() else vm.playStem(stem) }) {
-                Icon(if (isPlaying) Icons.Default.Stop else Icons.Default.PlayArrow, null)
-            }
-            IconButton(onClick = { vm.regenerate(stem) }) {
-                Icon(Icons.Default.Refresh, "Remix")
-            }
-            IconButton(onClick = { vm.deleteStem(stem.id) }) {
-                Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error)
+
+            // Load to arrangement
+            Spacer(Modifier.height(4.dp))
+            FilledTonalButton(
+                onClick = { vm.loadStemToArrangement(stem) },
+                modifier = Modifier.fillMaxWidth().height(32.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp)
+            ) {
+                Icon(Icons.Default.Add, null, Modifier.size(14.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Add to Arrangement", fontSize = 11.sp)
             }
         }
     }

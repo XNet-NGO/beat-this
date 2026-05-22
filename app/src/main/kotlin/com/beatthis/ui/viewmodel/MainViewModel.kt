@@ -111,6 +111,29 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun pausePlayback() { player.pause() }
     fun resumePlayback() { player.resume() }
 
+    // --- ARRANGEMENT ---
+
+    /** Load a stem into the DAW arrangement as an audio track */
+    fun loadStemToArrangement(stem: Stem) {
+        val file = repo.audioFile(stem)
+        if (!file.exists()) return
+        val track = dawEngine.addTrack(stem.name, com.beatthis.daw.TrackType.AUDIO)
+        dawEngine.loadSample(file, stem.id)
+        _status.value = "Added '${stem.name}' to arrangement (track ${track.id})"
+    }
+
+    /** Export mixdown as WAV */
+    fun exportMixdown() {
+        dawEngine.record()
+        _status.value = "Recording mixdown..."
+        // Recording stops when sequencer finishes or user calls stopExport
+    }
+
+    fun stopExport() {
+        dawEngine.stopRecord()
+        _status.value = "Mixdown saved to recordings/"
+    }
+
     // --- STEM CRUD ---
 
     fun renameStem(id: String, newName: String) {
