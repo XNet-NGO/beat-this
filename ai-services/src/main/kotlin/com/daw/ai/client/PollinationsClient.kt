@@ -11,6 +11,11 @@ import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.Json
 
+/**
+ * Pollinations.ai REST client — OpenAI-compatible.
+ * Base URL: https://gen.pollinations.ai
+ * Auth: Bearer token or ?key= query param
+ */
 class PollinationsClient(private val apiKey: String) {
 
     companion object {
@@ -22,6 +27,7 @@ class PollinationsClient(private val apiKey: String) {
         install(ContentNegotiation) { json(this@PollinationsClient.json) }
     }
 
+    /** POST /v1/chat/completions — text generation with function calling */
     suspend fun chatCompletions(request: ChatRequest): ChatResponse =
         http.post("$BASE/v1/chat/completions") {
             contentType(ContentType.Application.Json)
@@ -29,13 +35,15 @@ class PollinationsClient(private val apiKey: String) {
             setBody(request)
         }.body()
 
-    suspend fun audio(prompt: String, model: String = "qwen-tts", voice: String? = null): ByteArray =
-        http.get("$BASE/audio/${prompt.encodeURLPath()}") {
+    /** GET /audio/{text} — TTS or music generation. Returns audio/mpeg bytes. */
+    suspend fun audio(text: String, model: String = "qwen-tts", voice: String? = null): ByteArray =
+        http.get("$BASE/audio/${text.encodeURLPath()}") {
             header(HttpHeaders.Authorization, "Bearer $apiKey")
             parameter("model", model)
             voice?.let { parameter("voice", it) }
         }.readBytes()
 
+    /** POST /v1/audio/speech — OpenAI-compatible TTS */
     suspend fun tts(input: String, model: String = "qwen-tts", voice: String = "nova"): ByteArray =
         http.post("$BASE/v1/audio/speech") {
             contentType(ContentType.Application.Json)
@@ -43,6 +51,7 @@ class PollinationsClient(private val apiKey: String) {
             setBody(AudioSpeechRequest(input = input, model = model, voice = voice))
         }.readBytes()
 
+    /** POST /v1/audio/transcriptions — STT (whisper-large-v3 or scribe) */
     suspend fun transcribe(audioBytes: ByteArray, model: String = "whisper-large-v3"): String =
         http.post("$BASE/v1/audio/transcriptions") {
             header(HttpHeaders.Authorization, "Bearer $apiKey")
@@ -55,6 +64,7 @@ class PollinationsClient(private val apiKey: String) {
             }))
         }.body<TranscriptionResponse>().text
 
+    /** GET /account/balance — returns remaining pollen */
     suspend fun balance(): Double =
         http.get("$BASE/account/balance") {
             header(HttpHeaders.Authorization, "Bearer $apiKey")
