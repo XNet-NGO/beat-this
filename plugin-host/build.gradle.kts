@@ -6,7 +6,16 @@ plugins {
 android {
     namespace = "com.beatthis.plugins"
     compileSdk = 35
-    defaultConfig { minSdk = 29 }
+    defaultConfig {
+        minSdk = 29
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
+        externalNativeBuild {
+            cmake { cppFlags("-std=c++17") }
+        }
+    }
+    externalNativeBuild {
+        cmake { path("src/main/cpp/CMakeLists.txt") }
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

@@ -1,0 +1,27 @@
+{
+  "buildFiles": [
+    "/home/xnet-admin/projects/beat-this/plugin-host/src/main/cpp/CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "/home/xnet-admin/android-sdk/cmake/3.22.1/bin/ninja",
+      "-C",
+      "/home/xnet-admin/projects/beat-this/plugin-host/.cxx/Debug/1i14z46e/x86_64",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "/home/xnet-admin/android-sdk/cmake/3.22.1/bin/ninja",
+    "-C",
+    "/home/xnet-admin/projects/beat-this/plugin-host/.cxx/Debug/1i14z46e/x86_64",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {
+    "plugin_bridge::@6890427a1f51a3e7e1df": {
+      "artifactName": "plugin_bridge",
+      "abi": "x86_64",
+      "output": "/home/xnet-admin/projects/beat-this/plugin-host/build/intermediates/cxx/Debug/1i14z46e/obj/x86_64/libplugin_bridge.so",
+      "runtimeFiles": []
+    }
+  }
+}

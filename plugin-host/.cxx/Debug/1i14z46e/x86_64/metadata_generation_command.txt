@@ -1,0 +1,19 @@
+                        -H/home/xnet-admin/projects/beat-this/plugin-host/src/main/cpp
+-DCMAKE_SYSTEM_NAME=Android
+-DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+-DCMAKE_SYSTEM_VERSION=29
+-DANDROID_PLATFORM=android-29
+-DANDROID_ABI=x86_64
+-DCMAKE_ANDROID_ARCH_ABI=x86_64
+-DANDROID_NDK=/home/xnet-admin/android-sdk/ndk/27.0.12077973
+-DCMAKE_ANDROID_NDK=/home/xnet-admin/android-sdk/ndk/27.0.12077973
+-DCMAKE_TOOLCHAIN_FILE=/home/xnet-admin/android-sdk/ndk/27.0.12077973/build/cmake/android.toolchain.cmake
+-DCMAKE_MAKE_PROGRAM=/home/xnet-admin/android-sdk/cmake/3.22.1/bin/ninja
+-DCMAKE_CXX_FLAGS=-std=c++17
+-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=/home/xnet-admin/projects/beat-this/plugin-host/build/intermediates/cxx/Debug/1i14z46e/obj/x86_64
+-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=/home/xnet-admin/projects/beat-this/plugin-host/build/intermediates/cxx/Debug/1i14z46e/obj/x86_64
+-DCMAKE_BUILD_TYPE=Debug
+-B/home/xnet-admin/projects/beat-this/plugin-host/.cxx/Debug/1i14z46e/x86_64
+-GNinja
+                        Build command args: []
+                        Version: 2

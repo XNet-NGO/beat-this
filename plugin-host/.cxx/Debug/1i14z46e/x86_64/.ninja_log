@@ -1,0 +1,3 @@
+# ninja log v5
+0	36	1779475019962763808	CMakeFiles/plugin_bridge.dir/plugin_bridge.cpp.o	6f6d8827875995a4
+36	53	1779475019981763808	/home/xnet-admin/projects/beat-this/plugin-host/build/intermediates/cxx/Debug/1i14z46e/obj/x86_64/libplugin_bridge.so	d21d817256a39e1f
