@@ -15,3 +15,4 @@ dependencyResolutionManagement {
 rootProject.name = "beat-this"
 include(":app")
 include(":ai-services")
+include(":plugin-host")

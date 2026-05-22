@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -18,6 +19,7 @@ import androidx.navigation.compose.rememberNavController
 import com.beatthis.ui.main.MainScreen
 import com.beatthis.ui.generate.GenerateScreen
 import com.beatthis.ui.compose.ComposeScreen
+import com.beatthis.ui.plugins.PluginBrowserScreen
 import com.beatthis.ui.settings.SettingsScreen
 import com.beatthis.ui.theme.BeatThisTheme
 
@@ -38,6 +40,7 @@ fun BeatThisNavHost() {
     val tabs = listOf(
         Triple("main", "Studio", Icons.Default.MusicNote),
         Triple("generate", "Generate", Icons.Default.AutoAwesome),
+        Triple("plugins", "Plugins", Icons.Default.Extension),
         Triple("compose", "Compose", Icons.Default.Chat),
         Triple("settings", "Settings", Icons.Default.Settings),
     )
@@ -59,6 +62,7 @@ fun BeatThisNavHost() {
         NavHost(navController, startDestination = "main", Modifier.padding(padding)) {
             composable("main") { MainScreen() }
             composable("generate") { GenerateScreen() }
+            composable("plugins") { PluginBrowserScreen() }
             composable("compose") { ComposeScreen() }
             composable("settings") { SettingsScreen() }
         }

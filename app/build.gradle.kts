@@ -28,6 +28,7 @@ android {
 
 dependencies {
     implementation(project(":ai-services"))
+    implementation(project(":plugin-host"))
 
     // Compose
     val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
