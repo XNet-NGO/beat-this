@@ -42,6 +42,7 @@ fun BeatThisApp() {
         Triple("studio", "Studio", Icons.Default.MusicNote),
         Triple("generate", "Generate", Icons.Default.AutoAwesome),
         Triple("compose", "Compose", Icons.Default.Chat),
+        Triple("plugins", "Plugins", Icons.Default.Extension),
         Triple("settings", "Settings", Icons.Default.Settings),
     )
 
@@ -85,6 +86,7 @@ fun BeatThisApp() {
             composable("studio") { MainScreen(vm) }
             composable("generate") { GenerateScreen(vm) }
             composable("compose") { ComposeScreen(vm) }
+            composable("plugins") { com.beatthis.ui.plugins.PluginBrowserScreen() }
             composable("settings") { SettingsScreen() }
         }
     }
