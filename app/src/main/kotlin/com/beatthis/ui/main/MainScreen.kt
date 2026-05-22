@@ -11,8 +11,12 @@ import androidx.compose.ui.unit.dp
 import com.beatthis.engine.midi.DrumPattern
 import com.beatthis.engine.midi.DrumTrackRow
 import com.beatthis.engine.midi.Pattern
+import com.beatthis.engine.Track
+import com.beatthis.engine.TrackType
 import com.beatthis.ui.pianoroll.PianoRollView
 import com.beatthis.ui.sequencer.StepSequencerView
+import com.beatthis.ui.timeline.TimelineView
+import com.beatthis.ui.timeline.TimelineClip
 
 @Composable
 fun MainScreen() {
@@ -32,6 +36,22 @@ fun MainScreen() {
 
         when (currentView) {
             StudioView.TRANSPORT -> TransportView()
+            StudioView.TIMELINE -> {
+                val demoTracks = remember { listOf(
+                    Track(1, "Drums", TrackType.DRUM),
+                    Track(2, "Bass", TrackType.MIDI),
+                    Track(3, "Keys", TrackType.MIDI),
+                    Track(4, "Vocals", TrackType.AUDIO),
+                ) }
+                val demoClips = remember { listOf(
+                    TimelineClip(1, 0, 4, "Beat A"),
+                    TimelineClip(1, 4, 4, "Beat A"),
+                    TimelineClip(2, 0, 8, "Bassline"),
+                    TimelineClip(3, 4, 4, "Chords"),
+                    TimelineClip(4, 8, 4, "Verse 1"),
+                ) }
+                TimelineView(demoTracks, demoClips)
+            }
             StudioView.PIANO_ROLL -> {
                 val pattern = remember { Pattern(id = 1, name = "Pattern 1") }
                 PianoRollView(pattern, modifier = Modifier.fillMaxSize())
@@ -54,7 +74,7 @@ fun MainScreen() {
 }
 
 enum class StudioView(val label: String) {
-    TRANSPORT("Studio"), PIANO_ROLL("Piano Roll"), SEQUENCER("Drums")
+    TRANSPORT("Studio"), TIMELINE("Timeline"), PIANO_ROLL("Piano Roll"), SEQUENCER("Drums")
 }
 
 @Composable
