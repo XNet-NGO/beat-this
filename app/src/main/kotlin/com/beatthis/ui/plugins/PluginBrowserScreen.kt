@@ -15,13 +15,14 @@ import com.beatthis.plugins.discovery.AapPluginInfo
 import com.beatthis.plugins.discovery.PluginScanner
 
 @Composable
-fun PluginBrowserScreen() {
+fun PluginBrowserScreen(vm: com.beatthis.ui.viewmodel.MainViewModel? = null) {
     val context = LocalContext.current
     val scanner = remember { PluginScanner(context) }
     var plugins by remember { mutableStateOf<List<AapPluginInfo>>(emptyList()) }
     var isScanning by remember { mutableStateOf(true) }
     var filter by remember { mutableStateOf("") }
     var categoryFilter by remember { mutableStateOf<String?>(null) }
+    val tracks = vm?.dawEngine?.tracks?.collectAsState()
 
     LaunchedEffect(Unit) {
         plugins = scanner.scan()
@@ -103,14 +104,15 @@ fun PluginBrowserScreen() {
             }
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                items(filtered) { plugin -> PluginCard(plugin) }
+                items(filtered) { plugin -> PluginCard(plugin, vm) }
             }
         }
     }
 }
 
 @Composable
-private fun PluginCard(plugin: AapPluginInfo) {
+private fun PluginCard(plugin: AapPluginInfo, vm: com.beatthis.ui.viewmodel.MainViewModel?) {
+    val tracks = vm?.dawEngine?.tracks?.collectAsState()
     Card(Modifier.fillMaxWidth()) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(
@@ -134,7 +136,10 @@ private fun PluginCard(plugin: AapPluginInfo) {
                     Text("${plugin.ports.size} ports | ${plugin.parameters.size} params", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
                 }
             }
-            IconButton(onClick = { /* TODO: load into mixer insert slot */ }) {
+            IconButton(onClick = {
+                val trackId = tracks?.value?.firstOrNull()?.id ?: 0
+                vm?.loadPluginToTrack(plugin, trackId)
+            }) {
                 Icon(Icons.Default.AddCircle, "Load", tint = MaterialTheme.colorScheme.primary)
             }
         }

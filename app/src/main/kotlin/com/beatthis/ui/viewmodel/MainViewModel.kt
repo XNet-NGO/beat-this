@@ -10,6 +10,9 @@ import com.beatthis.BuildConfig
 import com.beatthis.audio.*
 import com.beatthis.daw.DawEngine
 import com.beatthis.daw.VoiceCommandExecutor
+import com.beatthis.plugins.discovery.AapPluginInfo
+import com.beatthis.plugins.host.PluginHost
+import com.beatthis.plugins.host.PluginInstance
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -23,6 +26,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val mic = MicCapture(app)
     val dawEngine = DawEngine(app).also { it.init() }
     private val voiceExecutor = VoiceCommandExecutor(dawEngine)
+    val pluginHost = PluginHost(app)
 
     private val _status = MutableStateFlow("")
     val status = _status.asStateFlow()
@@ -216,5 +220,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    override fun onCleared() { client.close(); player.stop(); dawEngine.destroy() }
+    // --- PLUGINS ---
+
+    fun loadPluginToTrack(plugin: AapPluginInfo, trackId: Int) {
+        viewModelScope.launch {
+            try {
+                val slot = pluginHost.getTrackPlugins(trackId).size
+                pluginHost.loadPlugin(plugin, trackId, slot)
+                _status.value = "Loaded ${plugin.displayName} on track $trackId"
+            } catch (e: Exception) {
+                _status.value = "Failed: ${e.message?.take(40)}"
+            }
+        }
+    }
+
+    fun unloadPlugin(instanceId: String) {
+        pluginHost.unloadPlugin(instanceId)
+    }
+
+    override fun onCleared() { client.close(); player.stop(); dawEngine.destroy(); pluginHost.destroy() }
 }

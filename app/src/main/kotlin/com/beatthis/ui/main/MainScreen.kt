@@ -63,7 +63,7 @@ fun MainScreen(vm: MainViewModel) {
                     DrumTrackRow("Clap", 39), DrumTrackRow("Tom", 45), DrumTrackRow("Rim", 37),
                 ))
             }, modifier = Modifier.fillMaxSize())
-            StudioView.MIXER -> MixerView(engine)
+            StudioView.MIXER -> MixerView(engine, vm.pluginHost)
         }
     }
 }
@@ -229,8 +229,10 @@ private fun TrackLane(track: DawTrack, totalSteps: Int, currentStep: Int) {
 }
 
 @Composable
-private fun MixerView(engine: DawEngine) {
+private fun MixerView(engine: DawEngine, pluginHost: com.beatthis.plugins.host.PluginHost) {
     val tracks by engine.tracks.collectAsState()
+    val pluginInstances by pluginHost.instances.collectAsState()
+    var selectedPlugin by remember { mutableStateOf<com.beatthis.plugins.host.PluginInstance?>(null) }
 
     if (tracks.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -239,17 +241,30 @@ private fun MixerView(engine: DawEngine) {
         return
     }
 
-    Row(Modifier.fillMaxSize().horizontalScroll(rememberScrollState()).padding(8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        for (track in tracks) {
-            ChannelStrip(track)
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()).padding(8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            for (track in tracks) {
+                val trackPlugins = pluginInstances.filter { it.trackId == track.id }
+                ChannelStrip(track, trackPlugins) { selectedPlugin = it }
+            }
+            MasterStrip()
         }
-        // Master
-        MasterStrip()
+
+        // Plugin params panel
+        if (selectedPlugin != null) {
+            Surface(tonalElevation = 4.dp, modifier = Modifier.fillMaxWidth().heightIn(max = 280.dp)) {
+                com.beatthis.ui.plugins.PluginParamsSheet(
+                    instance = selectedPlugin!!,
+                    pluginHost = pluginHost,
+                    onDismiss = { selectedPlugin = null }
+                )
+            }
+        }
     }
 }
 
 @Composable
-private fun ChannelStrip(track: DawTrack) {
+private fun ChannelStrip(track: DawTrack, plugins: List<com.beatthis.plugins.host.PluginInstance>, onPluginClick: (com.beatthis.plugins.host.PluginInstance) -> Unit) {
     val trackColor = when (track.type) {
         TrackType.SYNTH -> Color(0xFF8B5CF6)
         TrackType.SAMPLER -> Color(0xFF3B82F6)
@@ -258,37 +273,50 @@ private fun ChannelStrip(track: DawTrack) {
     var volume by remember { mutableFloatStateOf(track.volume) }
     var pan by remember { mutableFloatStateOf(track.pan) }
 
-    Card(Modifier.width(72.dp).fillMaxHeight(), colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A1A))) {
+    Card(Modifier.width(76.dp).fillMaxHeight(), colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A1A))) {
         Column(Modifier.fillMaxSize().padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            // Track name
             Text(track.name, fontSize = 8.sp, maxLines = 1, color = trackColor)
+            Spacer(Modifier.height(2.dp))
+
+            // Insert slots (up to 4)
+            for (i in 0 until 4) {
+                val plugin = plugins.find { it.slotIndex == i }
+                Box(
+                    Modifier.fillMaxWidth().height(16.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(if (plugin != null) trackColor.copy(0.3f) else Color(0xFF2A2A2A))
+                        .clickable { plugin?.let { onPluginClick(it) } },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(plugin?.plugin?.displayName?.take(8) ?: "", fontSize = 6.sp, color = Color.White, maxLines = 1)
+                }
+                Spacer(Modifier.height(1.dp))
+            }
+
             Spacer(Modifier.height(4.dp))
 
             // Mute/Solo
             Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 Box(
-                    Modifier.size(24.dp).clip(RoundedCornerShape(4.dp))
+                    Modifier.size(22.dp).clip(RoundedCornerShape(4.dp))
                         .background(if (track.muted) Color.Red.copy(0.8f) else Color(0xFF333333))
                         .clickable { track.muted = !track.muted },
                     contentAlignment = Alignment.Center
-                ) { Text("M", fontSize = 8.sp, color = Color.White) }
+                ) { Text("M", fontSize = 7.sp, color = Color.White) }
                 Box(
-                    Modifier.size(24.dp).clip(RoundedCornerShape(4.dp))
+                    Modifier.size(22.dp).clip(RoundedCornerShape(4.dp))
                         .background(if (track.solo) Color.Yellow.copy(0.8f) else Color(0xFF333333))
                         .clickable { track.solo = !track.solo },
                     contentAlignment = Alignment.Center
-                ) { Text("S", fontSize = 8.sp, color = if (track.solo) Color.Black else Color.White) }
+                ) { Text("S", fontSize = 7.sp, color = if (track.solo) Color.Black else Color.White) }
             }
 
             Spacer(Modifier.height(4.dp))
-
-            // Pan knob
-            Text("Pan", fontSize = 7.sp, color = Color.Gray)
+            Text("Pan", fontSize = 6.sp, color = Color.Gray)
             Slider(value = pan, onValueChange = { pan = it; track.pan = it }, valueRange = -1f..1f, modifier = Modifier.height(20.dp))
 
             Spacer(Modifier.weight(1f))
 
-            // Volume fader
             Slider(
                 value = volume,
                 onValueChange = { volume = it; track.volume = it },
@@ -297,9 +325,8 @@ private fun ChannelStrip(track: DawTrack) {
                 colors = SliderDefaults.colors(thumbColor = trackColor, activeTrackColor = trackColor)
             )
 
-            // dB label
             val db = if (volume > 0) (20 * Math.log10(volume.toDouble())).toInt() else -60
-            Text("${db}dB", fontSize = 8.sp, color = Color.Gray)
+            Text("${db}dB", fontSize = 7.sp, color = Color.Gray)
         }
     }
 }

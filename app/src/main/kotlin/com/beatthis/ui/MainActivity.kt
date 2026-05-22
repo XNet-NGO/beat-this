@@ -86,7 +86,7 @@ fun BeatThisApp() {
             composable("studio") { MainScreen(vm) }
             composable("generate") { GenerateScreen(vm) }
             composable("compose") { ComposeScreen(vm) }
-            composable("plugins") { com.beatthis.ui.plugins.PluginBrowserScreen() }
+            composable("plugins") { com.beatthis.ui.plugins.PluginBrowserScreen(vm) }
             composable("settings") { SettingsScreen() }
         }
     }
