@@ -8,9 +8,57 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.beatthis.engine.midi.DrumPattern
+import com.beatthis.engine.midi.DrumTrackRow
+import com.beatthis.engine.midi.Pattern
+import com.beatthis.ui.pianoroll.PianoRollView
+import com.beatthis.ui.sequencer.StepSequencerView
 
 @Composable
 fun MainScreen() {
+    var currentView by remember { mutableStateOf(StudioView.TRANSPORT) }
+
+    Column(Modifier.fillMaxSize()) {
+        // View switcher
+        TabRow(selectedTabIndex = currentView.ordinal) {
+            StudioView.entries.forEach { view ->
+                Tab(
+                    selected = currentView == view,
+                    onClick = { currentView = view },
+                    text = { Text(view.label) }
+                )
+            }
+        }
+
+        when (currentView) {
+            StudioView.TRANSPORT -> TransportView()
+            StudioView.PIANO_ROLL -> {
+                val pattern = remember { Pattern(id = 1, name = "Pattern 1") }
+                PianoRollView(pattern, modifier = Modifier.fillMaxSize())
+            }
+            StudioView.SEQUENCER -> {
+                val drumPattern = remember {
+                    DrumPattern(id = 1, tracks = mutableListOf(
+                        DrumTrackRow("Kick", 36),
+                        DrumTrackRow("Snare", 38),
+                        DrumTrackRow("HiHat", 42),
+                        DrumTrackRow("Clap", 39),
+                        DrumTrackRow("Tom", 45),
+                        DrumTrackRow("Rim", 37),
+                    ))
+                }
+                StepSequencerView(drumPattern, modifier = Modifier.fillMaxSize())
+            }
+        }
+    }
+}
+
+enum class StudioView(val label: String) {
+    TRANSPORT("Studio"), PIANO_ROLL("Piano Roll"), SEQUENCER("Drums")
+}
+
+@Composable
+private fun TransportView() {
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -18,17 +66,10 @@ fun MainScreen() {
         Text("Beat This", style = MaterialTheme.typography.headlineLarge)
         Spacer(Modifier.height(8.dp))
         Text("Voice-Controlled AI DAW", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-
         Spacer(Modifier.weight(1f))
-
-        // Transport bar
         TransportBar()
-
         Spacer(Modifier.height(24.dp))
-
-        // Voice command button
         VoiceCommandButton()
-
         Spacer(Modifier.weight(1f))
     }
 }
