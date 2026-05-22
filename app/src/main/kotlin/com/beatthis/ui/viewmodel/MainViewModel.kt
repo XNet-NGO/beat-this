@@ -157,18 +157,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     // --- COMPOSE ---
 
-    /** Shared pattern that piano roll displays */
-    private val _currentPattern = MutableStateFlow(com.beatthis.engine.midi.Pattern(id = 1, name = "MIDIjourney"))
-    val currentPattern = _currentPattern.asStateFlow()
+    /** Notes loaded from MIDIjourney, observed by piano roll */
+    private val _pianoNotes = MutableStateFlow<List<com.beatthis.engine.midi.Note>>(emptyList())
+    val pianoNotes = _pianoNotes.asStateFlow()
+
+    private val _pianoLengthBars = MutableStateFlow(4)
+    val pianoLengthBars = _pianoLengthBars.asStateFlow()
 
     fun loadToPianoRoll(notes: List<com.beatthis.engine.midi.Note>) {
-        val pattern = _currentPattern.value
-        pattern.notes.clear()
-        pattern.notes.addAll(notes)
-        // Calculate length in bars from the notes
+        _pianoNotes.value = notes
         val maxTick = notes.maxOfOrNull { it.startTick + it.durationTicks } ?: 0
-        pattern.lengthBars = ((maxTick / com.beatthis.engine.midi.Pattern.TICKS_PER_BAR) + 1).coerceAtLeast(4)
-        _currentPattern.value = pattern.copy(id = pattern.id) // trigger recompose
+        _pianoLengthBars.value = ((maxTick / com.beatthis.engine.midi.Pattern.TICKS_PER_BAR) + 1).coerceAtLeast(4)
         _status.value = "✓ Loaded ${notes.size} notes to Piano Roll"
     }
 

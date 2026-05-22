@@ -16,7 +16,6 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.beatthis.engine.midi.DrumPattern
 import com.beatthis.engine.midi.DrumTrackRow
-import com.beatthis.engine.midi.Pattern
 import com.beatthis.engine.Track
 import com.beatthis.engine.TrackType
 import com.beatthis.ui.pianoroll.PianoRollView
@@ -50,8 +49,9 @@ fun MainScreen(vm: MainViewModel) {
                 TimelineView(demoTracks, demoClips)
             }
             StudioView.PIANO_ROLL -> {
-                val pattern by vm.currentPattern.collectAsState()
-                PianoRollView(pattern, modifier = Modifier.fillMaxSize())
+                val importedNotes by vm.pianoNotes.collectAsState()
+                val lengthBars by vm.pianoLengthBars.collectAsState()
+                PianoRollView(importedNotes = importedNotes, lengthBars = lengthBars, modifier = Modifier.fillMaxSize())
             }
             StudioView.SEQUENCER -> StepSequencerView(remember {
                 DrumPattern(1, tracks = mutableListOf(

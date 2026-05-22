@@ -26,101 +26,90 @@ import com.beatthis.engine.midi.Pattern
 
 @Composable
 fun PianoRollView(
-    pattern: Pattern,
+    importedNotes: List<Note> = emptyList(),
+    lengthBars: Int = 4,
     modifier: Modifier = Modifier
 ) {
-    val noteRange = 48..84 // C3 to C6 (3 octaves, more usable)
+    val noteRange = 36..96 // C2 to C7
     val totalKeys = noteRange.last - noteRange.first
-    val keyHeight = 24.dp
+    val keyHeight = 20.dp
     val tickWidth = 0.5.dp
+    val totalTicks = lengthBars * Pattern.TICKS_PER_BAR
 
     val hScroll = rememberScrollState()
     val vScroll = rememberScrollState()
 
-    var notes by remember { mutableStateOf(pattern.notes.toList()) }
+    // Local mutable notes state, seeded from imported
+    var notes by remember(importedNotes) { mutableStateOf(importedNotes) }
 
     Row(modifier.fillMaxSize()) {
-        // Piano keys — tap to preview sound
-        Column(Modifier.width(48.dp).verticalScroll(vScroll)) {
+        // Piano keys
+        Column(Modifier.width(40.dp).verticalScroll(vScroll)) {
             for (pitch in noteRange.reversed()) {
                 val isBlack = pitch % 12 in listOf(1, 3, 6, 8, 10)
                 Box(
                     Modifier
                         .height(keyHeight)
                         .fillMaxWidth()
-                        .background(if (isBlack) Color(0xFF333333) else Color(0xFF666666))
+                        .background(if (isBlack) Color(0xFF222222) else Color(0xFF444444))
                         .clickable { ToneGenerator.playNote(pitch, 300) }
                 ) {
-                    val noteName = arrayOf("C","C#","D","D#","E","F","F#","G","G#","A","A#","B")[pitch % 12]
-                    if (pitch % 12 == 0 || pitch % 12 == 5) {
-                        Text("$noteName${pitch / 12 - 1}", fontSize = 8.sp, color = Color.White)
+                    val names = arrayOf("C","C#","D","D#","E","F","F#","G","G#","A","A#","B")
+                    if (pitch % 12 == 0) {
+                        Text("C${pitch / 12 - 1}", fontSize = 8.sp, color = Color.White)
                     }
                 }
             }
         }
 
-        // Note grid
+        // Grid + notes
         Box(Modifier.weight(1f).horizontalScroll(hScroll).verticalScroll(vScroll)) {
             Canvas(
                 Modifier
-                    .width((pattern.lengthTicks * tickWidth.value).dp)
+                    .width((totalTicks * tickWidth.value).dp)
                     .height((totalKeys * keyHeight.value).dp)
-                    .pointerInput(Unit) {
+                    .pointerInput(notes) {
                         detectTapGestures { offset ->
                             val tick = (offset.x / tickWidth.toPx()).toInt()
                             val pitch = noteRange.last - (offset.y / keyHeight.toPx()).toInt()
                             if (pitch !in noteRange) return@detectTapGestures
-                            val quantizedTick = (tick / 120) * 120
-                            val existing = notes.find { it.pitch == pitch && it.startTick == quantizedTick }
+                            val q = (tick / 120) * 120
+                            val existing = notes.find { it.pitch == pitch && it.startTick == q }
                             if (existing != null) {
                                 notes = notes - existing
-                                pattern.notes.remove(existing)
                             } else {
-                                val note = Note(pitch, quantizedTick, 120, 100)
+                                val note = Note(pitch, q, 120, 100)
                                 notes = notes + note
-                                pattern.notes.add(note)
-                                // Play the note on tap
                                 ToneGenerator.playNote(pitch, 200)
                             }
                         }
                     }
             ) {
-                drawGrid(noteRange, pattern.lengthTicks, keyHeight.toPx(), tickWidth.toPx())
-                drawNotes(notes, noteRange, keyHeight.toPx(), tickWidth.toPx())
+                val keyH = keyHeight.toPx()
+                val tickW = tickWidth.toPx()
+
+                // Grid
+                for (i in 0..totalKeys) {
+                    val y = i * keyH
+                    val p = noteRange.last - i
+                    drawLine(Color(0xFF1A1A1A), Offset(0f, y), Offset(size.width, y))
+                    if (p % 12 in listOf(1, 3, 6, 8, 10)) drawRect(Color(0x08FFFFFF), Offset(0f, y), Size(size.width, keyH))
+                }
+                val beats = totalTicks / Pattern.TICKS_PER_BEAT
+                for (b in 0..beats) {
+                    val x = b * Pattern.TICKS_PER_BEAT * tickW
+                    drawLine(if (b % 4 == 0) Color(0xFF3A3A3A) else Color(0xFF222222), Offset(x, 0f), Offset(x, size.height), strokeWidth = if (b % 4 == 0) 2f else 1f)
+                }
+
+                // Notes
+                for (note in notes) {
+                    if (note.pitch !in noteRange) continue
+                    val x = note.startTick * tickW
+                    val y = (noteRange.last - note.pitch) * keyH
+                    val w = note.durationTicks * tickW
+                    drawRoundRect(Color(0xFFBB86FC), Offset(x, y + 1), Size(w.coerceAtLeast(4f), keyH - 2), cornerRadius = CornerRadius(3f))
+                }
             }
         }
-    }
-}
-
-private fun DrawScope.drawGrid(noteRange: IntRange, lengthTicks: Int, keyH: Float, tickW: Float) {
-    val totalKeys = noteRange.last - noteRange.first
-
-    for (i in 0..totalKeys) {
-        val y = i * keyH
-        val pitch = noteRange.last - i
-        val isBlack = pitch % 12 in listOf(1, 3, 6, 8, 10)
-        drawLine(Color(0xFF2A2A2A), Offset(0f, y), Offset(size.width, y))
-        if (isBlack) drawRect(Color(0x11FFFFFF), Offset(0f, y), Size(size.width, keyH))
-    }
-
-    val beatsTotal = lengthTicks / Pattern.TICKS_PER_BEAT
-    for (beat in 0..beatsTotal) {
-        val x = beat * Pattern.TICKS_PER_BEAT * tickW
-        val isBar = beat % 4 == 0
-        drawLine(
-            if (isBar) Color(0xFF4A4A4A) else Color(0xFF2A2A2A),
-            Offset(x, 0f), Offset(x, size.height),
-            strokeWidth = if (isBar) 2f else 1f
-        )
-    }
-}
-
-private fun DrawScope.drawNotes(notes: List<Note>, noteRange: IntRange, keyH: Float, tickW: Float) {
-    for (note in notes) {
-        if (note.pitch !in noteRange) continue
-        val x = note.startTick * tickW
-        val y = (noteRange.last - note.pitch) * keyH
-        val w = note.durationTicks * tickW
-        drawRoundRect(Color(0xFFBB86FC), Offset(x, y + 1), Size(w, keyH - 2), cornerRadius = CornerRadius(4f))
     }
 }

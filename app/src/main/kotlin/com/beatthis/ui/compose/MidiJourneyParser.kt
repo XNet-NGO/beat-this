@@ -21,7 +21,7 @@ object MidiJourneyParser {
         return hasChordProgression(text) || hasCsvNotation(text) || hasBassPattern(text)
     }
 
-    private fun hasChordProgression(text: String) = Regex("""\|\s*[A-G][#b]?\w*\s*\|""").containsMatchIn(text)
+    private fun hasChordProgression(text: String) = Regex("""\|?\s*[A-G][#b]?\w*\s*\|""").containsMatchIn(text)
     private fun hasCsvNotation(text: String) = text.contains("pitch,time,duration,velocity")
     private fun hasBassPattern(text: String) = Regex("""[A-G][#b]?\s*[–—-]\s*[A-G][#b]?""").containsMatchIn(text)
 
@@ -45,20 +45,23 @@ object MidiJourneyParser {
     /** Parse | Dm9 | Cmaj7 | Bbmaj7 | A7 | format */
     private fun parseChordProgressions(text: String): List<Note> {
         val notes = mutableListOf<Note>()
-        val progressionRegex = Regex("""\|([^|]+\|)+""")
         val chordRegex = Regex("""([A-G][#b]?)(\w*)""")
         var barOffset = 0
 
         for (line in text.lines()) {
-            val trimmed = line.trim()
-            if (!trimmed.startsWith("|") || !trimmed.contains(Regex("""[A-G]"""))) continue
-            // Skip header lines like "| Dm9 | Cmaj7 |"
-            val chords = trimmed.split("|").filter { it.isNotBlank() }.map { it.trim() }
+            // Strip markdown formatting
+            val trimmed = line.trim().replace(Regex("""\*+"""), "").replace(Regex("""_+"""), "")
+            if (!trimmed.contains("|") || !trimmed.contains(Regex("""[A-G]"""))) continue
 
-            for (chordStr in chords) {
-                val match = chordRegex.find(chordStr) ?: continue
+            val segments = trimmed.split("|").filter { it.isNotBlank() }.map { it.trim() }
+
+            for (segment in segments) {
+                // Skip section markers like [Chorus], [Verse]
+                if (segment.startsWith("[")) continue
+                val match = chordRegex.find(segment) ?: continue
                 val root = match.groupValues[1]
                 val quality = match.groupValues[2]
+                if (root.isEmpty()) continue
 
                 val chordNotes = chordToNotes(root, quality, octave = 4)
                 val tickStart = barOffset * Pattern.TICKS_PER_BAR
