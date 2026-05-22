@@ -4,12 +4,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Piano
-import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,9 +25,13 @@ fun ComposeScreen(vm: MainViewModel) {
     }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("MIDIjourney", style = MaterialTheme.typography.headlineMedium)
-        Text("AI composition — outputs load directly into piano roll", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.Piano, null, Modifier.size(24.dp), tint = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(8.dp))
+            Text("MIDIjourney", style = MaterialTheme.typography.headlineMedium)
+        }
+        Text("AI composition assistant — outputs load into piano roll", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(12.dp))
 
         // Messages
         LazyColumn(Modifier.weight(1f), state = listState, verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -38,17 +39,18 @@ fun ComposeScreen(vm: MainViewModel) {
                 item {
                     Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                         Column(Modifier.padding(16.dp)) {
-                            Text("Try:", style = MaterialTheme.typography.titleSmall)
-                            Text("• Write a 4-bar chord progression in Am for lo-fi", style = MaterialTheme.typography.bodySmall)
-                            Text("• Suggest a melody over Cmaj7 - Dm7 - G7", style = MaterialTheme.typography.bodySmall)
-                            Text("• Create a bass line for a funk groove in E", style = MaterialTheme.typography.bodySmall)
+                            Text("Try asking:", style = MaterialTheme.typography.titleSmall)
+                            Spacer(Modifier.height(4.dp))
+                            SuggestionRow(Icons.Default.QueueMusic, "Write a 4-bar chord progression in Am for lo-fi")
+                            SuggestionRow(Icons.Default.Straighten, "Suggest a melody over Cmaj7 - Dm7 - G7")
+                            SuggestionRow(Icons.Default.ViewTimeline, "Create a song structure for a 3-minute pop track")
                         }
                     }
                 }
             }
             items(messages.indices.toList()) { i ->
                 val (text, isUser) = messages[i]
-                MessageBubble(text, isUser, onLoadToPianoRoll = {
+                MessageBubble(text, isUser, onImport = {
                     val parsed = MidiJourneyParser.parse(text)
                     if (parsed.isNotEmpty()) vm.loadToPianoRoll(parsed)
                 })
@@ -57,19 +59,15 @@ fun ComposeScreen(vm: MainViewModel) {
 
         Spacer(Modifier.height(8.dp))
 
-        // Input — multiline, scrollable, word wrap, copy/paste all work natively with TextField
+        // Input
         OutlinedTextField(
             value = input,
             onValueChange = { input = it },
             placeholder = { Text("Describe what you want composed...") },
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 56.dp, max = 160.dp),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp, max = 160.dp),
             maxLines = 6,
             trailingIcon = {
-                IconButton(
-                    onClick = { if (input.isNotBlank()) { vm.askComposition(input); input = "" } }
-                ) {
+                IconButton(onClick = { if (input.isNotBlank()) { vm.askComposition(input); input = "" } }) {
                     Icon(Icons.Default.Send, "Send")
                 }
             }
@@ -78,7 +76,16 @@ fun ComposeScreen(vm: MainViewModel) {
 }
 
 @Composable
-private fun MessageBubble(text: String, isUser: Boolean, onLoadToPianoRoll: () -> Unit) {
+private fun SuggestionRow(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String) {
+    Row(Modifier.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.width(6.dp))
+        Text(text, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+@Composable
+private fun MessageBubble(text: String, isUser: Boolean, onImport: () -> Unit) {
     val hasImportable = !isUser && MidiJourneyParser.hasImportableContent(text)
 
     Card(
@@ -95,7 +102,7 @@ private fun MessageBubble(text: String, isUser: Boolean, onLoadToPianoRoll: () -
 
             if (hasImportable) {
                 Spacer(Modifier.height(8.dp))
-                Button(onClick = onLoadToPianoRoll, modifier = Modifier.fillMaxWidth()) {
+                Button(onClick = onImport, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Default.Piano, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
                     Text("Import to Studio")

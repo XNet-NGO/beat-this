@@ -111,7 +111,8 @@ private fun TransportBar(engine: DawEngine, vm: MainViewModel) {
                 }
                 // Metronome
                 IconButton(onClick = { engine.toggleMetronome() }, modifier = Modifier.size(28.dp)) {
-                    Text("🥁", fontSize = 12.sp)
+                    Icon(Icons.Default.Timer, null, Modifier.size(14.dp),
+                        tint = if (metronomeEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
 
                 // Tempo
