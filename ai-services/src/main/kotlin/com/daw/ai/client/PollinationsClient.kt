@@ -3,6 +3,7 @@ package com.daw.ai.client
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.engine.okhttp.*
+import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.client.request.forms.*
@@ -12,9 +13,8 @@ import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.Json
 
 /**
- * Pollinations.ai REST client — OpenAI-compatible.
+ * Pollinations.ai REST client.
  * Base URL: https://gen.pollinations.ai
- * Auth: Bearer token or ?key= query param
  */
 class PollinationsClient(private val apiKey: String) {
 
@@ -25,9 +25,14 @@ class PollinationsClient(private val apiKey: String) {
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
     private val http = HttpClient(OkHttp) {
         install(ContentNegotiation) { json(this@PollinationsClient.json) }
+        install(HttpTimeout) {
+            requestTimeoutMillis = 90_000  // 90s for acestep
+            connectTimeoutMillis = 15_000
+            socketTimeoutMillis = 90_000
+        }
     }
 
-    /** POST /v1/chat/completions — text generation with function calling */
+    /** POST /v1/chat/completions */
     suspend fun chatCompletions(request: ChatRequest): ChatResponse =
         http.post("$BASE/v1/chat/completions") {
             contentType(ContentType.Application.Json)
@@ -35,7 +40,7 @@ class PollinationsClient(private val apiKey: String) {
             setBody(request)
         }.body()
 
-    /** GET /audio/{text} — TTS or music generation. Returns audio/mpeg bytes. */
+    /** GET /audio/{text} — TTS or music. Returns audio bytes. */
     suspend fun audio(text: String, model: String = "qwen-tts", voice: String? = null): ByteArray =
         http.get("$BASE/audio/${text.encodeURLPath()}") {
             header(HttpHeaders.Authorization, "Bearer $apiKey")
@@ -43,15 +48,19 @@ class PollinationsClient(private val apiKey: String) {
             voice?.let { parameter("voice", it) }
         }.readBytes()
 
-    /** POST /v1/audio/speech — OpenAI-compatible TTS */
-    suspend fun tts(input: String, model: String = "qwen-tts", voice: String = "nova"): ByteArray =
+    /** POST /v1/audio/speech — for acestep with lyrics or TTS */
+    suspend fun audioSpeech(input: String, model: String = "acestep", voice: String? = null): ByteArray =
         http.post("$BASE/v1/audio/speech") {
             contentType(ContentType.Application.Json)
             header(HttpHeaders.Authorization, "Bearer $apiKey")
-            setBody(AudioSpeechRequest(input = input, model = model, voice = voice))
+            setBody(AudioSpeechRequest(input = input, model = model, voice = voice ?: "alloy"))
         }.readBytes()
 
-    /** POST /v1/audio/transcriptions — STT (whisper-large-v3 or scribe) */
+    /** Alias for backward compat with services */
+    suspend fun tts(input: String, model: String = "qwen-tts", voice: String = "nova"): ByteArray =
+        audio(input, model, voice)
+
+    /** POST /v1/audio/transcriptions — STT */
     suspend fun transcribe(audioBytes: ByteArray, model: String = "whisper-large-v3"): String =
         http.post("$BASE/v1/audio/transcriptions") {
             header(HttpHeaders.Authorization, "Bearer $apiKey")
@@ -64,7 +73,7 @@ class PollinationsClient(private val apiKey: String) {
             }))
         }.body<TranscriptionResponse>().text
 
-    /** GET /account/balance — returns remaining pollen */
+    /** GET /account/balance */
     suspend fun balance(): Double =
         http.get("$BASE/account/balance") {
             header(HttpHeaders.Authorization, "Bearer $apiKey")
