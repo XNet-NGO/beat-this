@@ -1,28 +1,20 @@
 package com.beatthis.daw
 
 import android.content.Context
-import android.media.AudioAttributes
-import android.media.AudioFormat
-import android.media.AudioTrack
-import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlin.math.sin
+import nl.igorski.mwengine.MWEngine
+import nl.igorski.mwengine.core.*
+import java.io.File
 
 /**
- * Beat This DAW Engine — real-time audio sequencer.
- * Modeled after MWEngine API (drop-in replacement when native lib is compiled).
- * Uses AudioTrack for output until MWEngine NDK is integrated.
+ * Beat This DAW Engine — powered by MWEngine native audio.
  */
-class DawEngine(private val context: Context) {
+class DawEngine(private val context: Context) : MWEngine.IObserver {
 
-    companion object {
-        const val SAMPLE_RATE = 44100
-        const val BUFFER_SIZE = 1024
-        const val CHANNELS = 2
-    }
+    private lateinit var engine: MWEngine
+    private lateinit var sequencer: SequencerController
 
-    // Transport state
     private val _isPlaying = MutableStateFlow(false)
     val isPlaying = _isPlaying.asStateFlow()
 
@@ -41,78 +33,118 @@ class DawEngine(private val context: Context) {
     private val _metronomeEnabled = MutableStateFlow(false)
     val metronomeEnabled = _metronomeEnabled.asStateFlow()
 
-    // Sequencer
     var stepsPerMeasure = 16
     var measures = 4
     val totalSteps get() = stepsPerMeasure * measures
 
-    // Tracks
     private val _tracks = MutableStateFlow<List<DawTrack>>(emptyList())
     val tracks = _tracks.asStateFlow()
 
-    private var audioTrack: AudioTrack? = null
-    private var renderJob: Job? = null
-    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    // MWEngine instruments (hold strong refs to prevent GC)
+    private val instruments = mutableListOf<BaseInstrument>()
+    private val events = mutableListOf<BaseAudioEvent>()
+    private var masterLimiter: Limiter? = null
+    private var masterFilter: LPFHPFilter? = null
+
+    private val outputChannels = 2
+    private var sampleRate = 44100
+    private var bufferSize = 512
 
     fun init() {
-        audioTrack = AudioTrack.Builder()
-            .setAudioAttributes(AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_MEDIA)
-                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                .build())
-            .setAudioFormat(AudioFormat.Builder()
-                .setEncoding(AudioFormat.ENCODING_PCM_FLOAT)
-                .setSampleRate(SAMPLE_RATE)
-                .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO)
-                .build())
-            .setBufferSizeInBytes(BUFFER_SIZE * CHANNELS * 4)
-            .setTransferMode(AudioTrack.MODE_STREAM)
-            .build()
-        audioTrack?.play()
+        engine = MWEngine(this)
+
+        bufferSize = MWEngine.getRecommendedBufferSize(context)
+        sampleRate = MWEngine.getRecommendedSampleRate(context)
+
+        val driver = if (android.os.Build.VERSION.SDK_INT >= 26) Drivers.types.AAUDIO else Drivers.types.OPENSL
+        engine.createOutput(sampleRate, bufferSize, outputChannels, 1, driver)
+
+        // Setup sequencer
+        sequencer = engine.sequencerController
+        sequencer.setTempoNow(_tempo.value, 4, 4)
+        sequencer.updateMeasures(measures, stepsPerMeasure)
+
+        // Master bus processing
+        val masterBus = engine.masterBusProcessors
+        masterFilter = LPFHPFilter(sampleRate.toFloat(), 40f, outputChannels)
+        masterLimiter = Limiter()
+        masterBus.addProcessor(masterFilter)
+        masterBus.addProcessor(masterLimiter)
+
+        engine.start()
     }
 
     // --- TRANSPORT ---
 
     fun play() {
-        if (_isPlaying.value) return
         _isPlaying.value = true
-        startRenderLoop()
+        sequencer.setPlaying(true)
     }
 
     fun stop() {
         _isPlaying.value = false
+        sequencer.setPlaying(false)
+        sequencer.rewind()
         _currentStep.value = 0
-        renderJob?.cancel()
     }
 
     fun pause() {
         _isPlaying.value = false
-        renderJob?.cancel()
+        sequencer.setPlaying(false)
     }
 
     fun record() {
         _isRecording.value = true
+        val path = File(context.filesDir, "recordings").also { it.mkdirs() }
+        engine.startOutputRecording("${path.absolutePath}/rec_${System.currentTimeMillis()}.wav")
         play()
     }
 
     fun stopRecord() {
         _isRecording.value = false
+        engine.stopOutputRecording()
     }
 
     fun setTempo(bpm: Float) {
         _tempo.value = bpm.coerceIn(30f, 300f)
+        sequencer.setTempoNow(bpm, 4, 4)
     }
 
-    fun toggleLoop() { _loopEnabled.value = !_loopEnabled.value }
-    fun toggleMetronome() { _metronomeEnabled.value = !_metronomeEnabled.value }
+    fun toggleLoop() {
+        _loopEnabled.value = !_loopEnabled.value
+        if (_loopEnabled.value) {
+            sequencer.setLoopRange(0, totalSteps)
+        } else {
+            sequencer.setLoopRange(0, 0) // disable
+        }
+    }
+
+    fun toggleMetronome() {
+        _metronomeEnabled.value = !_metronomeEnabled.value
+        // MWEngine doesn't have built-in metronome, we'd add a click track
+    }
 
     // --- TRACKS ---
 
     fun addTrack(name: String, type: TrackType): DawTrack {
+        val instrument: BaseInstrument = when (type) {
+            TrackType.SYNTH -> SynthInstrument().also { synth ->
+                synth.getOscillatorProperties(0).setWaveform(2) // sawtooth
+                synth.adsr.setAttackTime(0.01f)
+                synth.adsr.setDecayTime(0.2f)
+                synth.adsr.setSustainLevel(0.6f)
+                synth.adsr.setReleaseTime(0.3f)
+            }
+            TrackType.SAMPLER -> SampledInstrument()
+            TrackType.AUDIO -> SampledInstrument() // audio tracks use sampler
+        }
+        instruments.add(instrument)
+
         val track = DawTrack(
             id = _tracks.value.size,
             name = name,
-            type = type
+            type = type,
+            instrumentIndex = instruments.size - 1
         )
         _tracks.value = _tracks.value + track
         return track
@@ -124,92 +156,85 @@ class DawEngine(private val context: Context) {
 
     fun getTrack(id: Int): DawTrack? = _tracks.value.find { it.id == id }
 
-    // --- RENDER LOOP ---
+    // --- EVENTS ---
 
-    private fun startRenderLoop() {
-        renderJob = scope.launch {
-            val buffer = FloatArray(BUFFER_SIZE * CHANNELS)
-            while (isActive && _isPlaying.value) {
-                val stepDurationMs = (60_000.0 / _tempo.value / (stepsPerMeasure / 4.0)).toLong()
-                val samplesPerStep = (SAMPLE_RATE * stepDurationMs / 1000).toInt()
-
-                // Render audio for this step
-                renderStep(buffer, _currentStep.value, samplesPerStep)
-
-                // Write to output
-                audioTrack?.write(buffer, 0, buffer.size, AudioTrack.WRITE_BLOCKING)
-
-                // Advance step
-                val next = _currentStep.value + 1
-                _currentStep.value = if (next >= totalSteps) {
-                    if (_loopEnabled.value) 0 else { stop(); 0 }
-                } else next
-            }
-        }
+    fun addSynthNote(trackId: Int, pitch: Int, step: Int, duration: Int = 1, velocity: Int = 100) {
+        val track = getTrack(trackId) ?: return
+        val instrument = instruments.getOrNull(track.instrumentIndex) as? SynthInstrument ?: return
+        val freq = (440.0 * Math.pow(2.0, (pitch - 69) / 12.0)).toFloat()
+        val event = SynthEvent(freq, step, duration.toFloat(), instrument)
+        events.add(event)
+        track.events.add(DawEvent(step, pitch, velocity, duration))
     }
 
-    private fun renderStep(buffer: FloatArray, step: Int, samplesNeeded: Int) {
-        buffer.fill(0f)
-        val samplesToWrite = minOf(samplesNeeded, BUFFER_SIZE)
-
-        for (track in _tracks.value) {
-            if (track.muted || track.volume == 0f) continue
-            renderTrackStep(buffer, track, step, samplesToWrite)
-        }
-
-        // Metronome click
-        if (_metronomeEnabled.value && step % (stepsPerMeasure / 4) == 0) {
-            val freq = if (step % stepsPerMeasure == 0) 1000.0 else 800.0
-            for (i in 0 until minOf(samplesToWrite, SAMPLE_RATE / 20)) {
-                val sample = (sin(2.0 * Math.PI * freq * i / SAMPLE_RATE) * 0.3f).toFloat()
-                val env = 1f - i.toFloat() / (SAMPLE_RATE / 20)
-                buffer[i * 2] += sample * env
-                buffer[i * 2 + 1] += sample * env
-            }
-        }
-
-        // Master limiter (clip prevention)
-        for (i in buffer.indices) {
-            buffer[i] = buffer[i].coerceIn(-1f, 1f)
-        }
+    fun addSample(trackId: Int, sampleName: String, step: Int) {
+        val track = getTrack(trackId) ?: return
+        val instrument = instruments.getOrNull(track.instrumentIndex) as? SampledInstrument ?: return
+        val event = SampleEvent(instrument)
+        event.setSample(SampleManager.getSample(sampleName))
+        events.add(event)
+        track.events.add(DawEvent(step, 60, 100, 1))
     }
 
-    private fun renderTrackStep(buffer: FloatArray, track: DawTrack, step: Int, samples: Int) {
-        val events = track.events.filter { it.step == step }
-        if (events.isEmpty()) return
-
-        for (event in events) {
-            when (track.type) {
-                TrackType.SYNTH -> renderSynthNote(buffer, event, track, samples)
-                TrackType.SAMPLER -> {} // TODO: sample playback
-                TrackType.AUDIO -> {} // TODO: audio clip playback
-            }
-        }
+    /** Load a WAV file into SampleManager */
+    fun loadSample(file: File, name: String) {
+        // SampleManager.setSample requires an AudioBuffer — for now, track the file path
+        // Full implementation requires reading WAV into native AudioBuffer via JNI
+        // This is handled when MWEngine's JavaUtilities.createSampleFromFile is available
     }
 
-    private fun renderSynthNote(buffer: FloatArray, event: DawEvent, track: DawTrack, samples: Int) {
-        val freq = 440.0 * Math.pow(2.0, (event.pitch - 69) / 12.0)
-        val vol = track.volume * (event.velocity / 127f)
-        val pan = track.pan // -1 to 1
+    // --- EFFECTS ---
 
-        for (i in 0 until samples) {
-            val t = i.toDouble() / SAMPLE_RATE
-            val sample = (sin(2.0 * Math.PI * freq * t) * vol).toFloat()
-            val env = if (i < samples / 10) i.toFloat() / (samples / 10) else 1f - (i - samples / 10).toFloat() / (samples * 9 / 10)
-            val s = sample * env
-            val l = s * (1f - pan.coerceAtLeast(0f))
-            val r = s * (1f + pan.coerceAtMost(0f))
-            buffer[i * 2] += l
-            buffer[i * 2 + 1] += r
+    fun addEffect(trackId: Int, effectType: EffectType) {
+        val track = getTrack(trackId) ?: return
+        val instrument = instruments.getOrNull(track.instrumentIndex) ?: return
+        val chain = instrument.audioChannel.processingChain
+
+        val processor: BaseProcessor = when (effectType) {
+            EffectType.REVERB -> Reverb(0.8f, 0.5f, 0.7f, 0.5f)
+            EffectType.DELAY -> Delay(250, 2000, 0.4f, 0.5f, outputChannels)
+            EffectType.FILTER -> Filter(2000f, 0.7f, 50f, (sampleRate / 4).toFloat(), outputChannels)
+            EffectType.DISTORTION -> WaveShaper(0.6f, 0.4f)
+            EffectType.CHORUS -> Phaser(0.5f, 0.7f, 0.5f, 440f, 1600f)
+            EffectType.PHASER -> Phaser(0.5f, 0.7f, 0.5f, 440f, 1600f)
+            EffectType.COMPRESSOR -> Compressor()
+            EffectType.EQ -> Filter(1000f, 1f, 20f, (sampleRate / 2).toFloat(), outputChannels)
+        }
+        chain.addProcessor(processor)
+        track.effects.add(DawEffect(effectType))
+    }
+
+    fun setTrackVolume(trackId: Int, volume: Float) {
+        val track = getTrack(trackId) ?: return
+        track.volume = volume
+        instruments.getOrNull(track.instrumentIndex)?.audioChannel?.setVolume(volume)
+    }
+
+    fun setTrackPan(trackId: Int, pan: Float) {
+        val track = getTrack(trackId) ?: return
+        track.pan = pan
+        instruments.getOrNull(track.instrumentIndex)?.audioChannel?.setPan(pan)
+    }
+
+    // --- MWEngine Observer ---
+
+    override fun handleNotification(id: Int) {
+        // MARKER_POSITION_REACHED, RECORDING_COMPLETED, etc.
+    }
+
+    override fun handleNotification(id: Int, value: Int) {
+        // SEQUENCER_POSITION_UPDATED
+        if (id == 6) { // SEQUENCER_POSITION_UPDATED
+            _currentStep.value = value
         }
     }
 
     fun destroy() {
         stop()
-        scope.cancel()
-        audioTrack?.stop()
-        audioTrack?.release()
-        audioTrack = null
+        engine.stop()
+        engine.dispose()
+        instruments.clear()
+        events.clear()
     }
 }
 
@@ -219,6 +244,7 @@ data class DawTrack(
     val id: Int,
     var name: String,
     val type: TrackType,
+    val instrumentIndex: Int = 0,
     var volume: Float = 0.8f,
     var pan: Float = 0f,
     var muted: Boolean = false,
@@ -231,7 +257,7 @@ data class DawEvent(
     val step: Int,
     val pitch: Int = 60,
     val velocity: Int = 100,
-    val duration: Int = 1 // in steps
+    val duration: Int = 1
 )
 
 data class DawEffect(

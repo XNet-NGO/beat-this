@@ -38,6 +38,7 @@ dependencies {
     implementation(project(":ai-services"))
     implementation(project(":plugin-host"))
     implementation(project(":audio-engine"))
+    implementation(project(":mwengine"))
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
 
     // Compose
