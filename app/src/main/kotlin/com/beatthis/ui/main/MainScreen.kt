@@ -37,26 +37,39 @@ fun MainScreen() {
 fun TransportBar() {
     var isPlaying by remember { mutableStateOf(false) }
     var isRecording by remember { mutableStateOf(false) }
+    var tempo by remember { mutableStateOf("120") }
 
-    Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-        FilledIconButton(onClick = { /* rewind */ }) {
-            Icon(Icons.Default.SkipPrevious, "Rewind")
-        }
-        FilledIconButton(
-            onClick = { isPlaying = !isPlaying },
-            colors = IconButtonDefaults.filledIconButtonColors(
-                containerColor = if (isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-            )
-        ) {
-            Icon(if (isPlaying) Icons.Default.Stop else Icons.Default.PlayArrow, "Play/Stop")
-        }
-        FilledIconButton(
-            onClick = { isRecording = !isRecording },
-            colors = IconButtonDefaults.filledIconButtonColors(
-                containerColor = if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.surfaceVariant
-            )
-        ) {
-            Icon(Icons.Default.FiberManualRecord, "Record")
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        // Tempo display
+        OutlinedTextField(
+            value = tempo,
+            onValueChange = { tempo = it },
+            label = { Text("BPM") },
+            modifier = Modifier.width(100.dp),
+            singleLine = true
+        )
+        Spacer(Modifier.height(12.dp))
+
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            FilledIconButton(onClick = { /* rewind */ }) {
+                Icon(Icons.Default.SkipPrevious, "Rewind")
+            }
+            FilledIconButton(
+                onClick = { isPlaying = !isPlaying },
+                colors = IconButtonDefaults.filledIconButtonColors(
+                    containerColor = if (isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
+                Icon(if (isPlaying) Icons.Default.Stop else Icons.Default.PlayArrow, "Play/Stop")
+            }
+            FilledIconButton(
+                onClick = { isRecording = !isRecording },
+                colors = IconButtonDefaults.filledIconButtonColors(
+                    containerColor = if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
+                Icon(Icons.Default.FiberManualRecord, "Record")
+            }
         }
     }
 }
