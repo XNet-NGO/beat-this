@@ -5,19 +5,24 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.beatthis.ui.viewmodel.MainViewModel
 
 @Composable
-fun GenerateScreen() {
+fun GenerateScreen(vm: MainViewModel) {
     var musicPrompt by remember { mutableStateOf("") }
     var vocalText by remember { mutableStateOf("") }
-    var isGenerating by remember { mutableStateOf(false) }
+    val isGenerating by vm.isGenerating.collectAsState()
+    val status by vm.status.collectAsState()
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Text("AI Generate", style = MaterialTheme.typography.headlineMedium)
+        if (status.isNotBlank()) {
+            Text(status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+        }
         Spacer(Modifier.height(16.dp))
 
         // Music generation
-        Text("Music", style = MaterialTheme.typography.titleMedium)
+        Text("Music (ACE-Step)", style = MaterialTheme.typography.titleMedium)
         OutlinedTextField(
             value = musicPrompt,
             onValueChange = { musicPrompt = it },
@@ -28,7 +33,7 @@ fun GenerateScreen() {
         )
         Spacer(Modifier.height(8.dp))
         Button(
-            onClick = { isGenerating = true },
+            onClick = { vm.generateMusic(musicPrompt) },
             enabled = musicPrompt.isNotBlank() && !isGenerating
         ) {
             Text(if (isGenerating) "Generating..." else "Generate Music")
@@ -37,7 +42,7 @@ fun GenerateScreen() {
         Spacer(Modifier.height(24.dp))
 
         // Vocal generation
-        Text("Vocals", style = MaterialTheme.typography.titleMedium)
+        Text("Vocals (TTS)", style = MaterialTheme.typography.titleMedium)
         OutlinedTextField(
             value = vocalText,
             onValueChange = { vocalText = it },
@@ -47,7 +52,7 @@ fun GenerateScreen() {
         )
         Spacer(Modifier.height(8.dp))
         Button(
-            onClick = { isGenerating = true },
+            onClick = { vm.generateVocals(vocalText) },
             enabled = vocalText.isNotBlank() && !isGenerating
         ) {
             Text(if (isGenerating) "Generating..." else "Generate Vocals")

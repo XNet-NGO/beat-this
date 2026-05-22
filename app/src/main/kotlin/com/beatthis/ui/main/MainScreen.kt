@@ -17,9 +17,10 @@ import com.beatthis.ui.pianoroll.PianoRollView
 import com.beatthis.ui.sequencer.StepSequencerView
 import com.beatthis.ui.timeline.TimelineView
 import com.beatthis.ui.timeline.TimelineClip
+import com.beatthis.ui.viewmodel.MainViewModel
 
 @Composable
-fun MainScreen() {
+fun MainScreen(vm: MainViewModel) {
     var currentView by remember { mutableStateOf(StudioView.TRANSPORT) }
 
     Column(Modifier.fillMaxSize()) {
@@ -35,7 +36,7 @@ fun MainScreen() {
         }
 
         when (currentView) {
-            StudioView.TRANSPORT -> TransportView()
+            StudioView.TRANSPORT -> TransportView(vm)
             StudioView.TIMELINE -> {
                 val demoTracks = remember { listOf(
                     Track(1, "Drums", TrackType.DRUM),
@@ -78,7 +79,11 @@ enum class StudioView(val label: String) {
 }
 
 @Composable
-private fun TransportView() {
+private fun TransportView(vm: MainViewModel) {
+    val status by vm.status.collectAsState()
+    val isListening by vm.isListening.collectAsState()
+    val lastCommand by vm.lastCommand.collectAsState()
+
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -86,10 +91,30 @@ private fun TransportView() {
         Text("Beat This", style = MaterialTheme.typography.headlineLarge)
         Spacer(Modifier.height(8.dp))
         Text("Voice-Controlled AI DAW", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+        if (status.isNotBlank()) {
+            Spacer(Modifier.height(8.dp))
+            Text(status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+        }
+        if (lastCommand.isNotBlank()) {
+            Text(lastCommand, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+
         Spacer(Modifier.weight(1f))
         TransportBar()
         Spacer(Modifier.height(24.dp))
-        VoiceCommandButton()
+
+        // Voice command button — wired to ViewModel
+        FloatingActionButton(
+            onClick = { vm.voiceCommand() },
+            containerColor = if (isListening) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(72.dp)
+        ) {
+            Icon(Icons.Default.Mic, "Voice Command", modifier = Modifier.size(32.dp))
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(if (isListening) "Listening..." else "Tap to speak", style = MaterialTheme.typography.bodySmall)
+
         Spacer(Modifier.weight(1f))
     }
 }
@@ -131,31 +156,6 @@ fun TransportBar() {
             ) {
                 Icon(Icons.Default.FiberManualRecord, "Record")
             }
-        }
-    }
-}
-
-@Composable
-fun VoiceCommandButton() {
-    var isListening by remember { mutableStateOf(false) }
-    var lastResult by remember { mutableStateOf("") }
-
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        FloatingActionButton(
-            onClick = { isListening = !isListening },
-            containerColor = if (isListening) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(72.dp)
-        ) {
-            Icon(Icons.Default.Mic, "Voice Command", modifier = Modifier.size(32.dp))
-        }
-        Spacer(Modifier.height(8.dp))
-        Text(
-            if (isListening) "Listening..." else "Tap to speak",
-            style = MaterialTheme.typography.bodySmall
-        )
-        if (lastResult.isNotBlank()) {
-            Spacer(Modifier.height(4.dp))
-            Text(lastResult, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
         }
     }
 }

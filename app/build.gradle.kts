@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -15,9 +17,15 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
+
+        // Embed Pollinations API key from local.properties
+        val props = rootProject.file("local.properties")
+        val localProps = Properties()
+        if (props.exists()) props.inputStream().use { localProps.load(it) }
+        buildConfigField("String", "POLLINATIONS_KEY", "\"${localProps.getProperty("pollinations.key", "")}\"")
     }
 
-    buildFeatures { compose = true }
+    buildFeatures { compose = true; buildConfig = true }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
