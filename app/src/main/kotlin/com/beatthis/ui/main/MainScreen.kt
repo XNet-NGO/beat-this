@@ -69,7 +69,6 @@ private fun TransportView(vm: MainViewModel) {
     val context = LocalContext.current
     val status by vm.status.collectAsState()
     val isListening by vm.isListening.collectAsState()
-    val lastCommand by vm.lastCommand.collectAsState()
     var textInput by remember { mutableStateOf("") }
 
     // Permission launcher
@@ -91,9 +90,6 @@ private fun TransportView(vm: MainViewModel) {
             Card(Modifier.fillMaxWidth()) {
                 Text(status, Modifier.padding(12.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
             }
-        }
-        if (lastCommand.isNotBlank()) {
-            Text(lastCommand, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
 
         Spacer(Modifier.weight(1f))
