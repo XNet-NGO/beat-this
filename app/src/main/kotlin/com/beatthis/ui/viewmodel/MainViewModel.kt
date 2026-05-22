@@ -69,8 +69,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             _isGenerating.value = true
             _status.value = "Generating vocals (~20s)..."
             try {
-                val audio = client.acestep(lyrics, duration, seed, voice)
-                val stem = repo.create(audio, lyrics.take(40), StemType.VOCALS, duration, seed, voice)
+                // Use POST endpoint for lyrics (supports long text with [Intro]/[Verse]/[Chorus] etc)
+                val audio = client.audioSpeech(lyrics, model = "acestep", voice = voice, seed = seed)
+                val stem = repo.create(audio, lyrics.lines().first().take(40), StemType.VOCALS, duration, seed, voice)
                 refreshStems()
                 playStem(stem)
                 _status.value = "✓ Saved: ${stem.name}"

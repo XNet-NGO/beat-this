@@ -149,21 +149,21 @@ fun GenerateScreen(vm: MainViewModel) {
         item {
             Button(
                 onClick = {
-                    val fullPrompt = buildPrompt(
-                        customMode = customMode,
-                        isInstrumental = isInstrumental,
-                        prompt = prompt,
-                        lyrics = lyrics,
-                        style = style,
-                        bpm = bpm
-                    )
-                    if (isInstrumental || !customMode) {
-                        vm.generateInstrumental(fullPrompt, duration.toIntOrNull(), seed.toLongOrNull())
+                    if (customMode && !isInstrumental) {
+                        // Custom lyrics mode: pass lyrics directly to POST endpoint
+                        vm.generateVocals(lyrics, duration.toIntOrNull(), seed.toLongOrNull(), null)
                     } else {
-                        vm.generateVocals(fullPrompt, duration.toIntOrNull(), seed.toLongOrNull(), null)
+                        // Quick mode or instrumental: build a short prompt for GET endpoint
+                        val fullPrompt = buildPrompt(
+                            isInstrumental = isInstrumental,
+                            prompt = prompt,
+                            style = style,
+                            bpm = bpm
+                        )
+                        vm.generateInstrumental(fullPrompt, duration.toIntOrNull(), seed.toLongOrNull())
                     }
                 },
-                enabled = (prompt.isNotBlank() || lyrics.isNotBlank()) && !isGenerating,
+                enabled = (if (customMode && !isInstrumental) lyrics.isNotBlank() else prompt.isNotBlank()) && !isGenerating,
                 modifier = Modifier.fillMaxWidth().height(52.dp)
             ) {
                 if (isGenerating) {
@@ -191,40 +191,17 @@ fun GenerateScreen(vm: MainViewModel) {
     }
 }
 
-/** Build the prompt string for ACE-Step based on mode */
+/** Build the prompt string for ACE-Step instrumental/quick mode */
 private fun buildPrompt(
-    customMode: Boolean,
     isInstrumental: Boolean,
     prompt: String,
-    lyrics: String,
     style: String,
     bpm: String
 ): String {
-    val parts = mutableListOf<String>()
-
-    if (isInstrumental) {
-        // Instrumental: just describe the music, no lyrics tags
-        parts.add(prompt)
-        if (style.isNotBlank()) parts.add(style)
-        if (bpm.isNotBlank()) parts.add("$bpm bpm")
-        parts.add("instrumental")
-        return parts.joinToString(", ")
-    }
-
-    if (customMode) {
-        // Custom lyrics mode: pass lyrics with tags directly
-        val prefix = buildString {
-            if (style.isNotBlank()) append("$style, ")
-            if (bpm.isNotBlank()) append("$bpm bpm, ")
-            append("vocals")
-        }
-        return "$prefix\n$lyrics"
-    }
-
-    // Quick mode with vocals: describe and let AI figure it out
-    parts.add(prompt)
+    val parts = mutableListOf(prompt)
     if (style.isNotBlank()) parts.add(style)
     if (bpm.isNotBlank()) parts.add("$bpm bpm")
+    if (isInstrumental) parts.add("instrumental")
     return parts.joinToString(", ")
 }
 
