@@ -6,4 +6,4 @@
 **/build/
 *.apk
 *.aab
-*.hprof
+*.hprofdeps/
