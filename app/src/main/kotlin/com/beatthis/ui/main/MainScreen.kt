@@ -154,9 +154,10 @@ private fun ArrangementView(engine: DawEngine) {
     val tracks by engine.tracks.collectAsState()
     val currentStep by engine.currentStep.collectAsState()
     var showAddTrack by remember { mutableStateOf(false) }
+    var editingTrack by remember { mutableStateOf<DawTrack?>(null) }
+    var renameText by remember { mutableStateOf("") }
 
     Column(Modifier.fillMaxSize()) {
-        // Track list + timeline
         if (tracks.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -169,8 +170,21 @@ private fun ArrangementView(engine: DawEngine) {
             }
         } else {
             LazyColumn(Modifier.weight(1f)) {
-                items(tracks) { track ->
-                    TrackLane(track, engine.totalSteps, currentStep)
+                items(tracks.size) { index ->
+                    val track = tracks[index]
+                    TrackLaneWithCrud(
+                        track = track,
+                        index = index,
+                        totalSteps = engine.totalSteps,
+                        currentStep = currentStep,
+                        isFirst = index == 0,
+                        isLast = index == tracks.size - 1,
+                        onRename = { editingTrack = track; renameText = track.name },
+                        onDelete = { engine.removeTrack(track.id) },
+                        onDuplicate = { engine.duplicateTrack(track.id) },
+                        onMoveUp = { if (index > 0) engine.moveTrack(index, index - 1) },
+                        onMoveDown = { if (index < tracks.size - 1) engine.moveTrack(index, index + 1) }
+                    )
                 }
                 item {
                     TextButton(onClick = { showAddTrack = true }, Modifier.fillMaxWidth()) {
@@ -188,39 +202,68 @@ private fun ArrangementView(engine: DawEngine) {
                 showAddTrack = false
             })
         }
+
+        // Rename dialog
+        if (editingTrack != null) {
+            AlertDialog(
+                onDismissRequest = { editingTrack = null },
+                title = { Text("Rename Track") },
+                text = {
+                    OutlinedTextField(value = renameText, onValueChange = { renameText = it }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                },
+                confirmButton = {
+                    Button(onClick = { engine.renameTrack(editingTrack!!.id, renameText); editingTrack = null }) { Text("Save") }
+                },
+                dismissButton = { TextButton(onClick = { editingTrack = null }) { Text("Cancel") } }
+            )
+        }
     }
 }
 
 @Composable
-private fun TrackLane(track: DawTrack, totalSteps: Int, currentStep: Int) {
+private fun TrackLaneWithCrud(
+    track: DawTrack, index: Int, totalSteps: Int, currentStep: Int,
+    isFirst: Boolean, isLast: Boolean,
+    onRename: () -> Unit, onDelete: () -> Unit, onDuplicate: () -> Unit,
+    onMoveUp: () -> Unit, onMoveDown: () -> Unit
+) {
     val trackColor = when (track.type) {
         TrackType.SYNTH -> Color(0xFF8B5CF6)
         TrackType.SAMPLER -> Color(0xFF3B82F6)
         TrackType.AUDIO -> Color(0xFF10B981)
     }
+    var showMenu by remember { mutableStateOf(false) }
 
     Row(Modifier.fillMaxWidth().height(48.dp).padding(vertical = 1.dp)) {
-        // Track header
+        // Track header with context menu
         Surface(
             color = trackColor.copy(alpha = 0.15f),
-            modifier = Modifier.width(80.dp).fillMaxHeight()
+            modifier = Modifier.width(100.dp).fillMaxHeight().clickable { showMenu = true }
         ) {
-            Column(Modifier.padding(4.dp), verticalArrangement = Arrangement.Center) {
-                Text(track.name, fontSize = 10.sp, maxLines = 1)
-                Text(track.type.name, fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Box(Modifier.padding(4.dp)) {
+                Column(verticalArrangement = Arrangement.Center, modifier = Modifier.fillMaxSize()) {
+                    Text(track.name, fontSize = 10.sp, maxLines = 1)
+                    Text(track.type.name, fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                    DropdownMenuItem(text = { Text("Rename") }, onClick = { showMenu = false; onRename() }, leadingIcon = { Icon(Icons.Default.Edit, null, Modifier.size(16.dp)) })
+                    DropdownMenuItem(text = { Text("Duplicate") }, onClick = { showMenu = false; onDuplicate() }, leadingIcon = { Icon(Icons.Default.ContentCopy, null, Modifier.size(16.dp)) })
+                    if (!isFirst) DropdownMenuItem(text = { Text("Move Up") }, onClick = { showMenu = false; onMoveUp() }, leadingIcon = { Icon(Icons.Default.ArrowUpward, null, Modifier.size(16.dp)) })
+                    if (!isLast) DropdownMenuItem(text = { Text("Move Down") }, onClick = { showMenu = false; onMoveDown() }, leadingIcon = { Icon(Icons.Default.ArrowDownward, null, Modifier.size(16.dp)) })
+                    HorizontalDivider()
+                    DropdownMenuItem(text = { Text("Delete", color = MaterialTheme.colorScheme.error) }, onClick = { showMenu = false; onDelete() }, leadingIcon = { Icon(Icons.Default.Delete, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error) })
+                }
             }
         }
 
         // Timeline lane
         Box(Modifier.weight(1f).fillMaxHeight().background(Color(0xFF1A1A1A)).horizontalScroll(rememberScrollState())) {
             Canvas(Modifier.width((totalSteps * 8).dp).fillMaxHeight()) {
-                // Events as blocks
                 for (event in track.events) {
                     val x = event.step * 8f * density
                     val w = event.duration * 8f * density
                     drawRoundRect(trackColor, topLeft = androidx.compose.ui.geometry.Offset(x, 4f), size = androidx.compose.ui.geometry.Size(w, size.height - 8f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(4f))
                 }
-                // Playhead
                 val px = currentStep * 8f * density
                 drawLine(Color.White, androidx.compose.ui.geometry.Offset(px, 0f), androidx.compose.ui.geometry.Offset(px, size.height), strokeWidth = 2f)
             }

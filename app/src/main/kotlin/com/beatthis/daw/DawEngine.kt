@@ -156,6 +156,25 @@ class DawEngine(private val context: Context) : MWEngine.IObserver {
 
     fun getTrack(id: Int): DawTrack? = _tracks.value.find { it.id == id }
 
+    fun renameTrack(id: Int, name: String) {
+        _tracks.value = _tracks.value.map { if (it.id == id) it.copy(name = name) else it }
+    }
+
+    fun duplicateTrack(id: Int) {
+        val src = getTrack(id) ?: return
+        val newId = (_tracks.value.maxOfOrNull { it.id } ?: 0) + 1
+        val copy = src.copy(id = newId, name = "${src.name} (copy)", events = src.events.toMutableList(), effects = src.effects.toMutableList())
+        _tracks.value = _tracks.value + copy
+    }
+
+    fun moveTrack(fromIndex: Int, toIndex: Int) {
+        val list = _tracks.value.toMutableList()
+        if (fromIndex !in list.indices || toIndex !in list.indices) return
+        val item = list.removeAt(fromIndex)
+        list.add(toIndex, item)
+        _tracks.value = list
+    }
+
     // --- EVENTS ---
 
     fun addSynthNote(trackId: Int, pitch: Int, step: Int, duration: Int = 1, velocity: Int = 100) {
