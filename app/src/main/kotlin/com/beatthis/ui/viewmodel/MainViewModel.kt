@@ -8,6 +8,8 @@ import com.daw.ai.client.Message
 import com.daw.ai.client.PollinationsClient
 import com.beatthis.BuildConfig
 import com.beatthis.audio.*
+import com.beatthis.daw.DawEngine
+import com.beatthis.daw.VoiceCommandExecutor
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -19,6 +21,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val repo = StemRepository(app)
     val player = AudioPlayer(app)
     private val mic = MicCapture(app)
+    val dawEngine = DawEngine(app).also { it.init() }
+    private val voiceExecutor = VoiceCommandExecutor(dawEngine)
 
     private val _status = MutableStateFlow("")
     val status = _status.asStateFlow()
@@ -131,7 +135,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 val audio = mic.record(4000)
                 _status.value = "Transcribing..."
                 val transcript = client.transcribe(audio)
-                _status.value = transcript
+                _status.value = "→ $transcript"
+                // Execute as DAW command
+                val result = voiceExecutor.execute(transcript, client)
+                _status.value = result
             } catch (e: Exception) {
                 _status.value = "✗ ${e.message?.take(60)}"
             } finally {
@@ -144,11 +151,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _status.value = "..."
             try {
-                val r = client.chatCompletions(ChatRequest(model = "openai", messages = listOf(
-                    Message("system", "You are a music production assistant. Be brief."),
-                    Message("user", text)
-                )))
-                _status.value = r.choices.firstOrNull()?.message?.content?.take(200) ?: ""
+                val result = voiceExecutor.execute(text, client)
+                _status.value = result
             } catch (e: Exception) {
                 _status.value = "✗ ${e.message?.take(60)}"
             }
@@ -189,5 +193,5 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    override fun onCleared() { client.close(); player.stop() }
+    override fun onCleared() { client.close(); player.stop(); dawEngine.destroy() }
 }
