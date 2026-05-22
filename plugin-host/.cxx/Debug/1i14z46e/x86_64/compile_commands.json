@@ -1,7 +1,0 @@
-[
-{
-  "directory": "/home/xnet-admin/projects/beat-this/plugin-host/.cxx/Debug/1i14z46e/x86_64",
-  "command": "/home/xnet-admin/android-sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++ --target=x86_64-none-linux-android29 --sysroot=/home/xnet-admin/android-sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64/sysroot -Dplugin_bridge_EXPORTS -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++17 -fno-limit-debug-info  -fPIC -o CMakeFiles/plugin_bridge.dir/plugin_bridge.cpp.o -c /home/xnet-admin/projects/beat-this/plugin-host/src/main/cpp/plugin_bridge.cpp",
-  "file": "/home/xnet-admin/projects/beat-this/plugin-host/src/main/cpp/plugin_bridge.cpp"
-}
-]

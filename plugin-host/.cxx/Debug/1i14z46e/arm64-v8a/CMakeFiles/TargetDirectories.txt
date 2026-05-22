@@ -1,3 +1,0 @@
-/home/xnet-admin/projects/beat-this/plugin-host/.cxx/Debug/1i14z46e/arm64-v8a/CMakeFiles/plugin_bridge.dir
-/home/xnet-admin/projects/beat-this/plugin-host/.cxx/Debug/1i14z46e/arm64-v8a/CMakeFiles/edit_cache.dir
-/home/xnet-admin/projects/beat-this/plugin-host/.cxx/Debug/1i14z46e/arm64-v8a/CMakeFiles/rebuild_cache.dir
