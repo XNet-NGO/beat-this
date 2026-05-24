@@ -20,10 +20,6 @@ class InProcessPluginLoader(private val context: Context) {
 
     /**
      * Load the plugin's ViewFactory and create its UI View.
-     * @param packageName The plugin's package name
-     * @param pluginId The plugin ID (passed to createView)
-     * @param instanceId The instance ID (passed to createView)
-     * @param viewFactoryClass The fully qualified ViewFactory class name
      */
     fun createPluginView(
         packageName: String,
@@ -31,22 +27,23 @@ class InProcessPluginLoader(private val context: Context) {
         instanceId: Int,
         viewFactoryClass: String
     ): View {
-        val classLoader = getOrCreateClassLoader(packageName)
         val pluginContext = createPluginContext(packageName)
+        val classLoader = getOrCreateClassLoader(packageName, pluginContext)
 
-        // Load native libs first
-        loadNativeLibs(packageName)
+        // Load aap-core native lib first (required by ViewFactory internals)
+        loadNativeFromApk(packageName, "androidaudioplugin")
+        loadNativeFromApk(packageName, "androidaudioplugin-ui")
 
         // Instantiate ViewFactory
         val cls = classLoader.loadClass(viewFactoryClass)
         val factory = cls.getConstructor().newInstance()
 
-        // Call createView via reflection (avoids compile-time dependency on AAP)
+        // Call createView via reflection
         val createViewMethod = cls.getMethod("createView", Context::class.java, String::class.java, Int::class.javaPrimitiveType)
         return createViewMethod.invoke(factory, pluginContext, pluginId, instanceId) as View
     }
 
-    private fun getOrCreateClassLoader(packageName: String): ClassLoader {
+    private fun getOrCreateClassLoader(packageName: String, pluginContext: Context): ClassLoader {
         return classLoaders.getOrPut(packageName) {
             val apkPath = getApkPath(packageName)
             val dexOutputDir = File(context.cacheDir, "plugin_dex/$packageName").also { it.mkdirs() }
@@ -56,7 +53,7 @@ class InProcessPluginLoader(private val context: Context) {
                 apkPath,
                 dexOutputDir.absolutePath,
                 nativeLibDir,
-                context.classLoader
+                pluginContext.classLoader
             )
         }
     }
@@ -78,24 +75,28 @@ class InProcessPluginLoader(private val context: Context) {
         return appInfo.nativeLibraryDir
     }
 
-    private fun loadNativeLibs(packageName: String) {
+    /**
+     * Load a native library from the plugin's APK.
+     * Uses the plugin's classloader which handles extractNativeLibs=false.
+     */
+    private fun loadNativeFromApk(packageName: String, libName: String) {
         try {
-            val libDir = File(getNativeLibDir(packageName) ?: return)
-            if (!libDir.exists()) return
+            val pluginContext = createPluginContext(packageName)
+            val classLoader = pluginContext.classLoader
 
-            // Load libs in dependency order — load smaller utility libs first
-            val libs = libDir.listFiles { f -> f.name.endsWith(".so") }
-                ?.sortedBy { it.length() } ?: return
-
-            for (lib in libs) {
-                try {
-                    System.load(lib.absolutePath)
-                } catch (_: UnsatisfiedLinkError) {
-                    // Already loaded or dependency missing — skip
-                }
-            }
+            // Use Runtime.loadLibrary0 via the plugin's classloader
+            val runtime = Runtime.getRuntime()
+            val loadLib = Runtime::class.java.getDeclaredMethod("loadLibrary0", ClassLoader::class.java, String::class.java)
+            loadLib.isAccessible = true
+            loadLib.invoke(runtime, classLoader, libName)
         } catch (_: Exception) {
-            // Non-fatal — some plugins work without explicit native loading
+            // Try direct path as fallback
+            try {
+                val libDir = getNativeLibDir(packageName)
+                if (libDir != null) {
+                    System.load("$libDir/lib$libName.so")
+                }
+            } catch (_: Exception) {}
         }
     }
 }
