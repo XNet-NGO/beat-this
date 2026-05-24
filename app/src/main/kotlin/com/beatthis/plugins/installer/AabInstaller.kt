@@ -39,44 +39,84 @@ class AabInstaller(private val context: Context) {
      */
     fun installFromUri(uri: Uri): Result<String> {
         return try {
-            val input = context.contentResolver.openInputStream(uri)
+            // First pass: check what kind of file this is
+            val probeInput = context.contentResolver.openInputStream(uri)
                 ?: return Result.failure(Exception("Cannot open file"))
 
-            // Try to extract as zip (APKS format from bundletool)
-            val apkFiles = extractApks(input)
-            input.close()
+            val fileType = probeFileType(probeInput)
+            probeInput.close()
 
-            if (apkFiles.isNotEmpty()) {
-                installApks(apkFiles)
-                apkFiles.forEach { it.delete() }
-                Result.success("Installing ${apkFiles.size} split APK(s)...")
-            } else {
-                // Check if it's a valid APK (starts with PK zip magic for APK, or has dex)
-                val headerInput = context.contentResolver.openInputStream(uri)!!
-                val header = ByteArray(4)
-                headerInput.read(header)
-                headerInput.close()
-
-                val isPkZip = header[0] == 0x50.toByte() && header[1] == 0x4B.toByte()
-
-                if (isPkZip) {
-                    // It's a zip but had no .apk entries — might be a raw AAB
-                    // Raw AABs cannot be installed directly. They need bundletool.
-                    return Result.failure(Exception(
-                        "This is a raw AAB file. Download the .apks version from the release page instead, " +
-                        "or use 'bundletool build-apks' on a PC to convert it."
+            when (fileType) {
+                FileType.APKS -> {
+                    // Zip containing .apk files — extract and install as splits
+                    val input = context.contentResolver.openInputStream(uri)!!
+                    val apkFiles = extractApks(input)
+                    input.close()
+                    if (apkFiles.isEmpty()) return Result.failure(Exception("No APKs found in archive"))
+                    installApks(apkFiles)
+                    apkFiles.forEach { it.delete() }
+                    Result.success("Installing ${apkFiles.size} split APK(s)...")
+                }
+                FileType.APK -> {
+                    // Single APK — install directly
+                    val input = context.contentResolver.openInputStream(uri)!!
+                    installSingleStream(input)
+                    input.close()
+                    Result.success("Installing APK...")
+                }
+                FileType.RAW_AAB -> {
+                    Result.failure(Exception(
+                        "Raw AAB cannot be installed directly. Download the .apks file from the release page instead."
                     ))
                 }
-
-                // Try as single APK anyway
-                val singleInput = context.contentResolver.openInputStream(uri)
-                    ?: return Result.failure(Exception("Cannot reopen file"))
-                installSingleStream(singleInput)
-                singleInput.close()
-                Result.success("Installing APK...")
+                FileType.UNKNOWN -> {
+                    // Try as single APK anyway
+                    val input = context.contentResolver.openInputStream(uri)!!
+                    installSingleStream(input)
+                    input.close()
+                    Result.success("Installing...")
+                }
             }
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    private enum class FileType { APK, APKS, RAW_AAB, UNKNOWN }
+
+    /** Probe the file to determine its type */
+    private fun probeFileType(input: InputStream): FileType {
+        try {
+            val zip = ZipInputStream(input)
+            var hasApkEntries = false
+            var hasClassesDex = false
+            var hasAndroidManifest = false
+            var hasBaseModule = false
+
+            var entry = zip.nextEntry
+            var count = 0
+            while (entry != null && count < 200) {
+                val name = entry.name
+                when {
+                    name.endsWith(".apk") && !entry.isDirectory -> hasApkEntries = true
+                    name == "classes.dex" || name.startsWith("classes") && name.endsWith(".dex") -> hasClassesDex = true
+                    name == "AndroidManifest.xml" -> hasAndroidManifest = true
+                    name.startsWith("base/") -> hasBaseModule = true
+                }
+                zip.closeEntry()
+                entry = zip.nextEntry
+                count++
+            }
+            zip.close()
+
+            return when {
+                hasApkEntries -> FileType.APKS
+                hasClassesDex || hasAndroidManifest -> FileType.APK
+                hasBaseModule -> FileType.RAW_AAB
+                else -> FileType.UNKNOWN
+            }
+        } catch (_: Exception) {
+            return FileType.UNKNOWN
         }
     }
 
