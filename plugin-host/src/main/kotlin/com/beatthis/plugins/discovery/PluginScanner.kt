@@ -71,6 +71,7 @@ class PluginScanner(private val context: Context) {
         var currentDev: String? = null
         var currentCat: String? = null
         var currentVer: String? = null
+        var currentViewFactory: String? = null
 
         while (true) {
             val event = xp.next()
@@ -83,6 +84,8 @@ class PluginScanner(private val context: Context) {
                         currentDev = xp.getAttributeValue(null, "developer")
                         currentCat = xp.getAttributeValue(null, "category")
                         currentVer = xp.getAttributeValue(null, "version")
+                        currentViewFactory = xp.getAttributeValue(null, "ui-view-factory")
+                            ?: xp.getAttributeValue("urn:org.androidaudioplugin.port", "ui-view-factory")
                         ports.clear()
                         params.clear()
                     }
@@ -113,6 +116,7 @@ class PluginScanner(private val context: Context) {
                         developer = currentDev,
                         category = currentCat,
                         version = currentVer,
+                        uiViewFactory = currentViewFactory,
                         ports = ports.toList(),
                         parameters = params.toList()
                     ))

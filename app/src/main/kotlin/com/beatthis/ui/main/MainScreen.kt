@@ -416,6 +416,8 @@ private fun AddTrackDialog(onDismiss: () -> Unit, onAdd: (String, TrackType) -> 
 private fun PluginsStudioView(pluginHost: com.beatthis.plugins.host.PluginHost) {
     val instances by pluginHost.instances.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
+    var expandedInstance by remember { mutableStateOf<com.beatthis.plugins.host.PluginInstance?>(null) }
+    val loader = remember { com.beatthis.plugins.host.InProcessPluginLoader(context) }
 
     if (instances.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -428,55 +430,100 @@ private fun PluginsStudioView(pluginHost: com.beatthis.plugins.host.PluginHost) 
             }
         }
     } else {
-        LazyColumn(Modifier.fillMaxSize().padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(instances.size) { i ->
-                val instance = instances[i]
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(12.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                if (instance.plugin.category == "Instrument") Icons.Default.Piano else Icons.Default.Tune,
-                                null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(instance.plugin.displayName, style = MaterialTheme.typography.titleSmall)
-                                Text("Track ${instance.trackId} | Slot ${instance.slotIndex}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            // Open plugin's native UI
-                            FilledTonalButton(onClick = {
-                                try {
-                                    val launchIntent = context.packageManager.getLaunchIntentForPackage(instance.plugin.packageName)
-                                    launchIntent?.let { context.startActivity(it) }
-                                } catch (_: Exception) {}
-                            }, contentPadding = PaddingValues(horizontal = 12.dp)) {
-                                Icon(Icons.Default.OpenInNew, null, Modifier.size(14.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text("Open", style = MaterialTheme.typography.labelSmall)
-                            }
-                            Spacer(Modifier.width(4.dp))
-                            IconButton(onClick = { pluginHost.unloadPlugin(instance.id) }, modifier = Modifier.size(32.dp)) {
-                                Icon(Icons.Default.Close, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error)
+        Column(Modifier.fillMaxSize()) {
+            // Embedded native plugin UI
+            if (expandedInstance != null) {
+                val inst = expandedInstance!!
+                Surface(Modifier.fillMaxWidth().weight(1f), tonalElevation = 2.dp) {
+                    Column {
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(inst.plugin.displayName, style = MaterialTheme.typography.titleSmall)
+                            Spacer(Modifier.weight(1f))
+                            IconButton(onClick = { expandedInstance = null }, modifier = Modifier.size(32.dp)) {
+                                Icon(Icons.Default.Close, null, Modifier.size(16.dp))
                             }
                         }
+                        // Render plugin's native View in-process
+                        val viewFactory = inst.plugin.uiViewFactory
+                        if (viewFactory != null) {
+                            androidx.compose.ui.viewinterop.AndroidView(
+                                factory = { ctx ->
+                                    try {
+                                        loader.createPluginView(
+                                            inst.plugin.packageName,
+                                            inst.plugin.pluginId,
+                                            inst.slotIndex,
+                                            viewFactory
+                                        )
+                                    } catch (e: Exception) {
+                                        // Fallback: show error in a TextView
+                                        android.widget.TextView(ctx).apply {
+                                            text = "Failed to load native UI: ${e.message}"
+                                            setPadding(16, 16, 16, 16)
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Text("No native UI available", style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                    }
+                }
+            }
 
-                        // Params
-                        if (instance.plugin.parameters.isNotEmpty()) {
-                            Spacer(Modifier.height(8.dp))
-                            for (param in instance.plugin.parameters.take(6)) {
-                                var value by remember { mutableFloatStateOf(instance.paramValues[param.id] ?: param.default.toFloat()) }
-                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                    Text(param.name, Modifier.width(90.dp), style = MaterialTheme.typography.bodySmall, maxLines = 1)
-                                    Slider(
-                                        value = value,
-                                        onValueChange = { value = it; pluginHost.setParameter(instance.id, param.id, it) },
-                                        valueRange = param.min.toFloat()..param.max.toFloat(),
-                                        modifier = Modifier.weight(1f)
-                                    )
+            // Plugin list
+            LazyColumn(
+                Modifier.let { if (expandedInstance != null) it.weight(0.3f) else it.weight(1f) }.padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(instances.size) { i ->
+                    val instance = instances[i]
+                    Card(Modifier.fillMaxWidth().clickable { expandedInstance = instance }) {
+                        Column(Modifier.padding(12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    if (instance.plugin.category == "Instrument") Icons.Default.Piano else Icons.Default.Tune,
+                                    null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(instance.plugin.displayName, style = MaterialTheme.typography.titleSmall)
+                                    Text("Track ${instance.trackId} | Slot ${instance.slotIndex}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    if (instance.plugin.uiViewFactory != null) {
+                                        Text("Native UI available", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                                    }
+                                }
+                                if (instance.plugin.uiViewFactory != null) {
+                                    FilledTonalButton(onClick = { expandedInstance = instance }, contentPadding = PaddingValues(horizontal = 12.dp)) {
+                                        Icon(Icons.Default.Fullscreen, null, Modifier.size(14.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text("UI", style = MaterialTheme.typography.labelSmall)
+                                    }
+                                    Spacer(Modifier.width(4.dp))
+                                }
+                                IconButton(onClick = { pluginHost.unloadPlugin(instance.id) }, modifier = Modifier.size(32.dp)) {
+                                    Icon(Icons.Default.Close, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error)
                                 }
                             }
-                            if (instance.plugin.parameters.size > 6) {
-                                Text("+ ${instance.plugin.parameters.size - 6} more", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+                            // Params (collapsed when UI is open)
+                            if (expandedInstance == null && instance.plugin.parameters.isNotEmpty()) {
+                                Spacer(Modifier.height(8.dp))
+                                for (param in instance.plugin.parameters.take(4)) {
+                                    var value by remember { mutableFloatStateOf(instance.paramValues[param.id] ?: param.default.toFloat()) }
+                                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                        Text(param.name, Modifier.width(90.dp), style = MaterialTheme.typography.bodySmall, maxLines = 1)
+                                        Slider(
+                                            value = value,
+                                            onValueChange = { value = it; pluginHost.setParameter(instance.id, param.id, it) },
+                                            valueRange = param.min.toFloat()..param.max.toFloat(),
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+                                }
                             }
                         }
                     }

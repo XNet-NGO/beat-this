@@ -9,6 +9,7 @@ data class AapPluginInfo(
     val developer: String?,
     val category: String?,
     val version: String?,
+    val uiViewFactory: String? = null,
     val ports: List<PortInfo> = emptyList(),
     val parameters: List<ParamInfo> = emptyList()
 )
