@@ -22,19 +22,19 @@ import com.beatthis.plugins.discovery.PluginScanner
 data class OnlinePlugin(val name: String, val desc: String, val category: String, val url: String)
 
 private val ONLINE_CATALOG = listOf(
-    OnlinePlugin("Hera", "Polyphonic virtual analog synth", "Instrument", "https://github.com/atsushieno/aap-juce-hera/releases"),
-    OnlinePlugin("Dexed", "DX7 FM synthesizer", "Instrument", "https://github.com/atsushieno/aap-juce-dexed/releases"),
-    OnlinePlugin("Odin2", "Wavetable/subtractive synth", "Instrument", "https://github.com/atsushieno/aap-juce-odin2/releases"),
-    OnlinePlugin("Surge XT", "Hybrid synthesizer", "Instrument", "https://github.com/atsushieno/aap-juce-surge/releases"),
-    OnlinePlugin("OB-Xf", "Oberheim emulation", "Instrument", "https://github.com/atsushieno/aap-juce-ob-xf/releases"),
-    OnlinePlugin("Audible Planets", "Orbital synth", "Instrument", "https://github.com/atsushieno/aap-juce-audible-planets/releases"),
-    OnlinePlugin("sfizz", "SFZ/SF2 sample player", "Instrument", "https://github.com/atsushieno/aap-lv2-sfizz/releases"),
-    OnlinePlugin("Frequalizer", "Parametric EQ", "Effect", "https://github.com/atsushieno/aap-juce-frequalizer/releases"),
-    OnlinePlugin("BYOD", "Guitar amp/effects chain", "Effect", "https://github.com/atsushieno/aap-juce-byod/releases"),
-    OnlinePlugin("ZL Equalizer", "Modern EQ", "Effect", "https://github.com/atsushieno/aap-juce-zlequalizer/releases"),
-    OnlinePlugin("mda-lv2", "Classic effects bundle (20+)", "Effect", "https://github.com/atsushieno/aap-lv2-mda/releases"),
-    OnlinePlugin("String Machine", "String ensemble", "Instrument", "https://github.com/atsushieno/aap-lv2-string-machine/releases"),
-    OnlinePlugin("ADLplug", "OPL3/OPN2 FM synth", "Instrument", "https://github.com/atsushieno/aap-juce-adlplug-ae/releases"),
+    OnlinePlugin("Hera", "Polyphonic virtual analog synth", "Instrument", "https://github.com/atsushieno/aap-juce-hera/releases/latest"),
+    OnlinePlugin("Dexed", "DX7 FM synthesizer", "Instrument", "https://github.com/atsushieno/aap-juce-dexed/releases/latest"),
+    OnlinePlugin("Odin2", "Wavetable/subtractive synth", "Instrument", "https://github.com/atsushieno/aap-juce-odin2/releases/latest"),
+    OnlinePlugin("Surge XT", "Hybrid synthesizer", "Instrument", "https://github.com/atsushieno/aap-juce-surge/releases/latest"),
+    OnlinePlugin("OB-Xf", "Oberheim emulation", "Instrument", "https://github.com/atsushieno/aap-juce-ob-xf/releases/latest"),
+    OnlinePlugin("Audible Planets", "Orbital synth", "Instrument", "https://github.com/atsushieno/aap-juce-audible-planets/releases/latest"),
+    OnlinePlugin("sfizz", "SFZ/SF2 sample player", "Instrument", "https://github.com/atsushieno/aap-lv2-sfizz/releases/latest"),
+    OnlinePlugin("Frequalizer", "Parametric EQ", "Effect", "https://github.com/atsushieno/aap-juce-frequalizer/releases/latest"),
+    OnlinePlugin("BYOD", "Guitar amp/effects chain", "Effect", "https://github.com/atsushieno/aap-juce-byod/releases/latest"),
+    OnlinePlugin("ZL Equalizer", "Modern EQ", "Effect", "https://github.com/atsushieno/aap-juce-zlequalizer/releases/latest"),
+    OnlinePlugin("mda-lv2", "Classic effects bundle (20+)", "Effect", "https://github.com/atsushieno/aap-lv2-mda/releases/latest"),
+    OnlinePlugin("String Machine", "String ensemble", "Instrument", "https://github.com/atsushieno/aap-lv2-string-machine/releases/latest"),
+    OnlinePlugin("ADLplug", "OPL3/OPN2 FM synth", "Instrument", "https://github.com/atsushieno/aap-juce-adlplug-ae/releases/latest"),
 )
 
 @Composable
@@ -179,6 +179,15 @@ private fun OnlineTab(filter: String, context: android.content.Context) {
     val filtered = ONLINE_CATALOG.filter { filter.isBlank() || it.name.contains(filter, true) || it.desc.contains(filter, true) }
 
     LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        item {
+            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
+                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Info, null, Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Download the .apks file (not .aab). Use file picker to install.", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
         items(filtered) { plugin ->
             Card(Modifier.fillMaxWidth()) {
                 Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {

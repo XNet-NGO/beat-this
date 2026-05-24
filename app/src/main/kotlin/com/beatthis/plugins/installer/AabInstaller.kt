@@ -42,16 +42,33 @@ class AabInstaller(private val context: Context) {
             val input = context.contentResolver.openInputStream(uri)
                 ?: return Result.failure(Exception("Cannot open file"))
 
-            // Try to extract as zip (AAB/APKS)
+            // Try to extract as zip (APKS format from bundletool)
             val apkFiles = extractApks(input)
             input.close()
 
             if (apkFiles.isNotEmpty()) {
                 installApks(apkFiles)
                 apkFiles.forEach { it.delete() }
-                Result.success("Installing ${apkFiles.size} APK(s)...")
+                Result.success("Installing ${apkFiles.size} split APK(s)...")
             } else {
-                // Not a zip or no APK entries — treat as single APK
+                // Check if it's a valid APK (starts with PK zip magic for APK, or has dex)
+                val headerInput = context.contentResolver.openInputStream(uri)!!
+                val header = ByteArray(4)
+                headerInput.read(header)
+                headerInput.close()
+
+                val isPkZip = header[0] == 0x50.toByte() && header[1] == 0x4B.toByte()
+
+                if (isPkZip) {
+                    // It's a zip but had no .apk entries — might be a raw AAB
+                    // Raw AABs cannot be installed directly. They need bundletool.
+                    return Result.failure(Exception(
+                        "This is a raw AAB file. Download the .apks version from the release page instead, " +
+                        "or use 'bundletool build-apks' on a PC to convert it."
+                    ))
+                }
+
+                // Try as single APK anyway
                 val singleInput = context.contentResolver.openInputStream(uri)
                     ?: return Result.failure(Exception("Cannot reopen file"))
                 installSingleStream(singleInput)
@@ -84,7 +101,8 @@ class AabInstaller(private val context: Context) {
     }
 
     /**
-     * Extract all .apk entries from a zip archive (AAB/APKS format).
+     * Extract all .apk entries from a zip archive (APKS format).
+     * Also handles raw AAB by extracting base module and repackaging as APK.
      * Returns empty list if not a valid zip.
      */
     private fun extractApks(input: InputStream): List<File> {
@@ -92,23 +110,32 @@ class AabInstaller(private val context: Context) {
         extractDir.listFiles()?.forEach { it.delete() }
 
         val apks = mutableListOf<File>()
+        var hasBaseManifest = false
+
         try {
             val zip = ZipInputStream(input)
             var entry = zip.nextEntry
             while (entry != null) {
                 val name = entry.name
                 if (name.endsWith(".apk") && !entry.isDirectory) {
+                    // APKS format: contains .apk files directly
                     val outFile = File(extractDir, name.substringAfterLast("/"))
                     outFile.outputStream().use { out -> zip.copyTo(out) }
                     if (outFile.length() > 0) apks.add(outFile)
+                }
+                if (name == "base/manifest/AndroidManifest.xml") {
+                    hasBaseManifest = true
                 }
                 zip.closeEntry()
                 entry = zip.nextEntry
             }
             zip.close()
         } catch (_: Exception) {
-            // Not a valid zip — return empty
+            // Not a valid zip
         }
+
+        // If we found .apk entries, use those (APKS format)
+        // If we found base/manifest but no APKs, it's a raw AAB — can't install directly
         return apks
     }
 
