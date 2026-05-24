@@ -30,8 +30,8 @@ class InProcessPluginLoader(private val context: Context) {
         val pluginContext = createPluginContext(packageName)
         val classLoader = getOrCreateClassLoader(packageName, pluginContext)
 
-        // Load native libs via plugin's classloader
-        val libNames = listOf("c++_shared", "oboe", "androidaudioplugin", "androidaudioplugin-manager", "juce_jni")
+        // Load native libs via plugin's classloader — discover from APK
+        val libNames = discoverNativeLibs(packageName)
         for (lib in libNames) {
             loadNativeFromApk(packageName, lib)
         }
@@ -75,6 +75,34 @@ class InProcessPluginLoader(private val context: Context) {
     private fun getNativeLibDir(packageName: String): String? {
         val appInfo = context.packageManager.getApplicationInfo(packageName, 0)
         return appInfo.nativeLibraryDir
+    }
+
+    /**
+     * Discover native lib names from the APK, ordered by dependency
+     * (shared libs first, then framework, then plugin-specific).
+     */
+    private fun discoverNativeLibs(packageName: String): List<String> {
+        val apkPath = getApkPath(packageName)
+        val abi = android.os.Build.SUPPORTED_ABIS.firstOrNull() ?: "arm64-v8a"
+        val prefix = "lib/$abi/lib"
+        val suffix = ".so"
+
+        val libs = mutableListOf<String>()
+        try {
+            java.util.zip.ZipFile(apkPath).use { zip ->
+                zip.entries().asSequence()
+                    .filter { it.name.startsWith(prefix) && it.name.endsWith(suffix) }
+                    .map { it.name.removePrefix(prefix).removeSuffix(suffix) }
+                    .toList()
+                    .let { all ->
+                        // Load order: shared runtime → audio framework → plugin
+                        val priority = listOf("c++_shared", "oboe", "androidaudioplugin", "androidaudioplugin-manager", "juce_jni", "aapmidideviceservice")
+                        for (p in priority) { if (p in all) libs.add(p) }
+                        for (lib in all) { if (lib !in libs) libs.add(lib) }
+                    }
+            }
+        } catch (_: Exception) {}
+        return libs
     }
 
     /**
