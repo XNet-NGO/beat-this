@@ -45,14 +45,19 @@ fun PluginBrowserScreen(vm: com.beatthis.ui.viewmodel.MainViewModel? = null) {
     var filter by remember { mutableStateOf("") }
     var tab by remember { mutableIntStateOf(0) } // 0=installed, 1=online
 
-    // File picker for APK install
+    // File picker for APK/AAB install
     val apkLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let {
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(it, "application/vnd.android.package-archive")
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
+            val installer = com.beatthis.plugins.installer.AabInstaller(context)
+            val result = installer.installFromUri(it)
+            result.onFailure { e ->
+                // Fallback: try direct APK install
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(it, "application/vnd.android.package-archive")
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
+                }
+                try { context.startActivity(intent) } catch (_: Exception) {}
             }
-            context.startActivity(intent)
         }
     }
 
@@ -73,8 +78,8 @@ fun PluginBrowserScreen(vm: com.beatthis.ui.viewmodel.MainViewModel? = null) {
             Text("Plugins", style = MaterialTheme.typography.headlineMedium)
             Spacer(Modifier.weight(1f))
             // Install from file
-            IconButton(onClick = { apkLauncher.launch("application/vnd.android.package-archive") }) {
-                Icon(Icons.Default.FolderOpen, "Install APK")
+            IconButton(onClick = { apkLauncher.launch("*/*") }) {
+                Icon(Icons.Default.FolderOpen, "Install plugin")
             }
         }
 
@@ -121,7 +126,7 @@ private fun InstalledTab(plugins: List<AapPluginInfo>, isScanning: Boolean, vm: 
                 Button(onClick = apkLauncher) {
                     Icon(Icons.Default.FolderOpen, null, Modifier.size(16.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("Install from file")
+                    Text("Install from file (APK/AAB)")
                 }
             }
         }

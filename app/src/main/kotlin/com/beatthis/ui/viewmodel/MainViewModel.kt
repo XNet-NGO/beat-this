@@ -31,6 +31,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _status = MutableStateFlow("")
     val status = _status.asStateFlow()
 
+    fun setStatus(msg: String) { _status.value = msg }
+
     private val _isGenerating = MutableStateFlow(false)
     val isGenerating = _isGenerating.asStateFlow()
 

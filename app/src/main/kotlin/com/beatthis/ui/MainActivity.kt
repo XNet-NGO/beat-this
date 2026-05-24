@@ -1,5 +1,6 @@
 package com.beatthis.ui
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -26,17 +27,34 @@ import com.beatthis.ui.viewmodel.MainViewModel
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { BeatThisTheme { BeatThisApp() } }
+        setContent { BeatThisTheme { BeatThisApp(intent) } }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
     }
 }
 
 @Composable
-fun BeatThisApp() {
+fun BeatThisApp(incomingIntent: Intent? = null) {
     val navController = rememberNavController()
     var selectedTab by remember { mutableIntStateOf(0) }
     val vm: MainViewModel = viewModel()
     var textInput by remember { mutableStateOf("") }
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    // Handle incoming AAB/APK file
+    LaunchedEffect(incomingIntent) {
+        val uri = incomingIntent?.data
+        if (uri != null && incomingIntent.action == Intent.ACTION_VIEW) {
+            val installer = com.beatthis.plugins.installer.AabInstaller(context)
+            val result = installer.installFromUri(uri)
+            result.onSuccess { vm.setStatus(it) }
+            result.onFailure { vm.setStatus("Install failed: ${it.message}") }
+        }
+    }
 
     val tabs = listOf(
         Triple("studio", "Studio", Icons.Default.MusicNote),
