@@ -148,7 +148,7 @@ private fun InstalledTab(plugins: List<AapPluginInfo>, isScanning: Boolean, vm: 
     } else {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             items(plugins) { plugin ->
-                val tracks = vm?.dawEngine?.tracks?.collectAsState()
+                val context = LocalContext.current
                 Card(Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(
@@ -162,8 +162,8 @@ private fun InstalledTab(plugins: List<AapPluginInfo>, isScanning: Boolean, vm: 
                             Text("${plugin.developer ?: ""} | ${plugin.category ?: "Effect"}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         IconButton(onClick = {
-                            val trackId = tracks?.value?.firstOrNull()?.id ?: 0
-                            vm?.loadPluginToTrack(plugin, trackId)
+                            vm?.loadPluginToTrack(plugin)
+                            android.widget.Toast.makeText(context, "Loading ${plugin.displayName}...", android.widget.Toast.LENGTH_SHORT).show()
                         }) {
                             Icon(Icons.Default.AddCircle, "Load", tint = MaterialTheme.colorScheme.primary)
                         }

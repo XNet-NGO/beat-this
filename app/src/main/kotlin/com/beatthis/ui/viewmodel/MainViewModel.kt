@@ -224,14 +224,26 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     // --- PLUGINS ---
 
-    fun loadPluginToTrack(plugin: AapPluginInfo, trackId: Int) {
+    fun loadPluginToTrack(plugin: AapPluginInfo, trackId: Int? = null) {
         viewModelScope.launch {
             try {
-                val slot = pluginHost.getTrackPlugins(trackId).size
-                pluginHost.loadPlugin(plugin, trackId, slot)
-                _status.value = "Loaded ${plugin.displayName} on track $trackId"
+                // Create a track if none exist
+                val targetTrackId = trackId ?: run {
+                    val tracks = dawEngine.tracks.value
+                    if (tracks.isEmpty()) {
+                        val type = if (plugin.category == "Instrument")
+                            com.beatthis.daw.TrackType.SYNTH else com.beatthis.daw.TrackType.AUDIO
+                        dawEngine.addTrack(plugin.displayName, type).id
+                    } else {
+                        tracks.first().id
+                    }
+                }
+
+                val slot = pluginHost.getTrackPlugins(targetTrackId).size
+                pluginHost.loadPlugin(plugin, targetTrackId, slot)
+                _status.value = "Loaded ${plugin.displayName} on track $targetTrackId (slot $slot)"
             } catch (e: Exception) {
-                _status.value = "Failed: ${e.message?.take(40)}"
+                _status.value = "Plugin load failed: ${e.message?.take(60)}"
             }
         }
     }

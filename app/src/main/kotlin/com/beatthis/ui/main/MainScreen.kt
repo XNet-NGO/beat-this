@@ -30,7 +30,7 @@ import com.beatthis.engine.midi.DrumPattern
 import com.beatthis.engine.midi.DrumTrackRow
 
 enum class StudioView(val label: String) {
-    ARRANGE("Arrange"), PIANO_ROLL("Piano Roll"), DRUMS("Drums"), MIXER("Mixer")
+    ARRANGE("Arrange"), PIANO_ROLL("Piano Roll"), DRUMS("Drums"), MIXER("Mixer"), PLUGINS("FX")
 }
 
 @Composable
@@ -64,6 +64,7 @@ fun MainScreen(vm: MainViewModel) {
                 ))
             }, modifier = Modifier.fillMaxSize())
             StudioView.MIXER -> MixerView(engine, vm.pluginHost)
+            StudioView.PLUGINS -> PluginsStudioView(vm.pluginHost)
         }
     }
 }
@@ -409,4 +410,70 @@ private fun AddTrackDialog(onDismiss: () -> Unit, onAdd: (String, TrackType) -> 
         confirmButton = { Button(onClick = { onAdd(name.ifBlank { "${type.name} ${1}" }, type) }) { Text("Add") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
+}
+
+@Composable
+private fun PluginsStudioView(pluginHost: com.beatthis.plugins.host.PluginHost) {
+    val instances by pluginHost.instances.collectAsState()
+
+    if (instances.isEmpty()) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(Icons.Default.Extension, null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(8.dp))
+                Text("No plugins loaded", style = MaterialTheme.typography.bodyLarge)
+                Spacer(Modifier.height(4.dp))
+                Text("Load plugins from the Plugins tab", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    } else {
+        LazyColumn(Modifier.fillMaxSize().padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(instances.size) { i ->
+                val instance = instances[i]
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                if (instance.plugin.category == "Instrument") Icons.Default.Piano else Icons.Default.Tune,
+                                null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(instance.plugin.displayName, style = MaterialTheme.typography.titleSmall)
+                                Text("Track ${instance.trackId} | Slot ${instance.slotIndex}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            IconButton(onClick = { pluginHost.unloadPlugin(instance.id) }) {
+                                Icon(Icons.Default.Close, null, tint = MaterialTheme.colorScheme.error)
+                            }
+                        }
+
+                        if (instance.plugin.parameters.isNotEmpty()) {
+                            Spacer(Modifier.height(8.dp))
+                            Text("Parameters", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.height(4.dp))
+                            for (param in instance.plugin.parameters.take(8)) {
+                                var value by remember { mutableFloatStateOf(instance.paramValues[param.id] ?: param.default.toFloat()) }
+                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(param.name, Modifier.width(100.dp), style = MaterialTheme.typography.bodySmall, maxLines = 1)
+                                    Slider(
+                                        value = value,
+                                        onValueChange = { value = it; pluginHost.setParameter(instance.id, param.id, it) },
+                                        valueRange = param.min.toFloat()..param.max.toFloat(),
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Text("%.2f".format(value), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                                }
+                            }
+                            if (instance.plugin.parameters.size > 8) {
+                                Text("+ ${instance.plugin.parameters.size - 8} more params", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        } else {
+                            Spacer(Modifier.height(4.dp))
+                            Text("No parameters exposed", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
