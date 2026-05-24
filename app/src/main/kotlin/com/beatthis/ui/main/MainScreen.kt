@@ -445,31 +445,26 @@ private fun PluginsStudioView(pluginHost: com.beatthis.plugins.host.PluginHost) 
                         }
                         // Render plugin's native View in-process
                         val viewFactory = inst.plugin.uiViewFactory
-                        if (viewFactory != null) {
-                            androidx.compose.ui.viewinterop.AndroidView(
-                                factory = { ctx ->
-                                    try {
-                                        loader.createPluginView(
-                                            inst.plugin.packageName,
-                                            inst.plugin.pluginId,
-                                            inst.slotIndex,
-                                            viewFactory
-                                        )
-                                    } catch (e: Exception) {
-                                        // Fallback: show error in a TextView
-                                        android.widget.TextView(ctx).apply {
-                                            text = "Failed to load native UI: ${e.message}"
-                                            setPadding(16, 16, 16, 16)
-                                        }
+                            ?: "org.androidaudioplugin.juce.JuceAudioPluginViewFactory" // known default for JUCE AAP plugins
+                        androidx.compose.ui.viewinterop.AndroidView(
+                            factory = { ctx ->
+                                try {
+                                    loader.createPluginView(
+                                        inst.plugin.packageName,
+                                        inst.plugin.pluginId,
+                                        inst.slotIndex,
+                                        viewFactory
+                                    )
+                                } catch (e: Exception) {
+                                    android.widget.TextView(ctx).apply {
+                                        text = "Failed to load native UI:\n${e.message}\n\n${e.cause?.message ?: ""}"
+                                        setPadding(32, 32, 32, 32)
+                                        setTextColor(android.graphics.Color.WHITE)
                                     }
-                                },
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        } else {
-                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Text("No native UI available", style = MaterialTheme.typography.bodyMedium)
-                            }
-                        }
+                                }
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        )
                     }
                 }
             }
@@ -492,18 +487,13 @@ private fun PluginsStudioView(pluginHost: com.beatthis.plugins.host.PluginHost) 
                                 Column(Modifier.weight(1f)) {
                                     Text(instance.plugin.displayName, style = MaterialTheme.typography.titleSmall)
                                     Text("Track ${instance.trackId} | Slot ${instance.slotIndex}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    if (instance.plugin.uiViewFactory != null) {
-                                        Text("Native UI available", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-                                    }
                                 }
-                                if (instance.plugin.uiViewFactory != null) {
-                                    FilledTonalButton(onClick = { expandedInstance = instance }, contentPadding = PaddingValues(horizontal = 12.dp)) {
-                                        Icon(Icons.Default.Fullscreen, null, Modifier.size(14.dp))
-                                        Spacer(Modifier.width(4.dp))
-                                        Text("UI", style = MaterialTheme.typography.labelSmall)
-                                    }
+                                FilledTonalButton(onClick = { expandedInstance = instance }, contentPadding = PaddingValues(horizontal = 12.dp)) {
+                                    Icon(Icons.Default.Fullscreen, null, Modifier.size(14.dp))
                                     Spacer(Modifier.width(4.dp))
+                                    Text("UI", style = MaterialTheme.typography.labelSmall)
                                 }
+                                Spacer(Modifier.width(4.dp))
                                 IconButton(onClick = { pluginHost.unloadPlugin(instance.id) }, modifier = Modifier.size(32.dp)) {
                                     Icon(Icons.Default.Close, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error)
                                 }
