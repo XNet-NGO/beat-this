@@ -2,6 +2,7 @@ package com.beatthis.ui.plugins
 
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -45,21 +46,33 @@ fun PluginBrowserScreen(vm: com.beatthis.ui.viewmodel.MainViewModel? = null) {
     var filter by remember { mutableStateOf("") }
     var tab by remember { mutableIntStateOf(0) } // 0=installed, 1=online
 
-    // File picker for APK/AAB install
-    val apkLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    // File picker for APK/AAB install — use OpenDocument to show all files
+    val apkLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { selectedUri ->
             val installer = com.beatthis.plugins.installer.AabInstaller(context)
             val result = installer.installFromUri(selectedUri)
-            result.onFailure {
-                // Fallback: try direct APK install
-                try {
-                    val intent = Intent(Intent.ACTION_VIEW).apply {
-                        setDataAndType(selectedUri, "application/vnd.android.package-archive")
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
-                    }
-                    context.startActivity(intent)
-                } catch (_: Exception) {}
+            result.onSuccess { msg ->
+                android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
             }
+            result.onFailure { e ->
+                android.widget.Toast.makeText(context, "Install failed: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    // Check install permission
+    val installPermLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        // After returning from settings, try picker
+        apkLauncher.launch(arrayOf("*/*"))
+    }
+
+    fun launchPicker() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !context.packageManager.canRequestPackageInstalls()) {
+            // Need to request install permission first
+            val intent = Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}"))
+            installPermLauncher.launch(intent)
+        } else {
+            apkLauncher.launch(arrayOf("*/*"))
         }
     }
 
@@ -80,7 +93,7 @@ fun PluginBrowserScreen(vm: com.beatthis.ui.viewmodel.MainViewModel? = null) {
             Text("Plugins", style = MaterialTheme.typography.headlineMedium)
             Spacer(Modifier.weight(1f))
             // Install from file
-            IconButton(onClick = { apkLauncher.launch("*/*") }) {
+            IconButton(onClick = { launchPicker() }) {
                 Icon(Icons.Default.FolderOpen, "Install plugin")
             }
         }
@@ -108,7 +121,7 @@ fun PluginBrowserScreen(vm: com.beatthis.ui.viewmodel.MainViewModel? = null) {
         Spacer(Modifier.height(8.dp))
 
         when (tab) {
-            0 -> InstalledTab(filtered, isScanning, vm, apkLauncher = { apkLauncher.launch("application/vnd.android.package-archive") })
+            0 -> InstalledTab(filtered, isScanning, vm, apkLauncher = { launchPicker() })
             1 -> OnlineTab(filter, context)
         }
     }
