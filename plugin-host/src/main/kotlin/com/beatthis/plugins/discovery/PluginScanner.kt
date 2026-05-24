@@ -13,30 +13,50 @@ import org.xmlpull.v1.XmlPullParser
 class PluginScanner(private val context: Context) {
 
     companion object {
-        const val AAP_ACTION = "org.androidaudioplugin.AudioPluginService.V4"
-        const val METADATA_KEY = "$AAP_ACTION#Plugins"
+        val AAP_ACTIONS = listOf(
+            "org.androidaudioplugin.AudioPluginService.V4",
+            "org.androidaudioplugin.AudioPluginService.V3",
+            "org.androidaudioplugin.AudioPluginService"
+        )
+        const val AAP_ACTION = "org.androidaudioplugin.AudioPluginService.V3" // most common
+        const val METADATA_KEY_V4 = "org.androidaudioplugin.AudioPluginService.V4#Plugins"
+        const val METADATA_KEY_V3 = "org.androidaudioplugin.AudioPluginService.V3#Plugins"
+        const val METADATA_KEY_LEGACY = "org.androidaudioplugin.AudioPluginService#Plugins"
     }
 
     /** Discover all installed AAP plugins. */
     fun scan(): List<AapPluginInfo> {
-        val intent = Intent(AAP_ACTION)
-        val pm = context.packageManager
-        val services = pm.queryIntentServices(intent, PackageManager.GET_META_DATA)
         val plugins = mutableListOf<AapPluginInfo>()
+        val seen = mutableSetOf<String>()
+        val pm = context.packageManager
 
-        for (resolveInfo in services) {
-            val serviceInfo = resolveInfo.serviceInfo ?: continue
-            val metaData = serviceInfo.metaData ?: continue
-            val xmlResId = metaData.getInt(METADATA_KEY, 0)
-            if (xmlResId == 0) continue
+        for (action in AAP_ACTIONS) {
+            val intent = Intent(action)
+            val services = pm.queryIntentServices(intent, PackageManager.GET_META_DATA)
 
-            try {
-                val res = pm.getResourcesForApplication(serviceInfo.applicationInfo)
-                val xp = res.getXml(xmlResId)
-                plugins.addAll(parseMetadata(xp, serviceInfo.packageName, serviceInfo.name))
-                xp.close()
-            } catch (e: Exception) {
-                // Skip malformed plugins
+            for (resolveInfo in services) {
+                val serviceInfo = resolveInfo.serviceInfo ?: continue
+                val key = "${serviceInfo.packageName}/${serviceInfo.name}"
+                if (key in seen) continue
+                seen.add(key)
+
+                val metaData = serviceInfo.metaData ?: continue
+                // Try all known metadata keys
+                val xmlResId = metaData.getInt("$action#Plugins", 0)
+                    .takeIf { it != 0 }
+                    ?: metaData.getInt(METADATA_KEY_V3, 0).takeIf { it != 0 }
+                    ?: metaData.getInt(METADATA_KEY_V4, 0).takeIf { it != 0 }
+                    ?: metaData.getInt(METADATA_KEY_LEGACY, 0).takeIf { it != 0 }
+                    ?: continue
+
+                try {
+                    val res = pm.getResourcesForApplication(serviceInfo.applicationInfo)
+                    val xp = res.getXml(xmlResId)
+                    plugins.addAll(parseMetadata(xp, serviceInfo.packageName, serviceInfo.name))
+                    xp.close()
+                } catch (e: Exception) {
+                    // Skip malformed plugins
+                }
             }
         }
         return plugins

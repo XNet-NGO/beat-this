@@ -3,6 +3,18 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <queries>
+        <intent>
+            <action android:name="org.androidaudioplugin.AudioPluginService.V4" />
+        </intent>
+        <intent>
+            <action android:name="org.androidaudioplugin.AudioPluginService.V3" />
+        </intent>
+        <intent>
+            <action android:name="org.androidaudioplugin.AudioPluginService" />
+        </intent>
+    </queries>
+
     <application
         android:name=".BeatThisApp"
         android:label="Beat This"
