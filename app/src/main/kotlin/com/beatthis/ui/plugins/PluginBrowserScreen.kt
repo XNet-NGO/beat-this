@@ -47,16 +47,18 @@ fun PluginBrowserScreen(vm: com.beatthis.ui.viewmodel.MainViewModel? = null) {
 
     // File picker for APK/AAB install
     val apkLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let {
+        uri?.let { selectedUri ->
             val installer = com.beatthis.plugins.installer.AabInstaller(context)
-            val result = installer.installFromUri(it)
-            result.onFailure { e ->
+            val result = installer.installFromUri(selectedUri)
+            result.onFailure {
                 // Fallback: try direct APK install
-                val intent = Intent(Intent.ACTION_VIEW).apply {
-                    setDataAndType(it, "application/vnd.android.package-archive")
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
-                }
-                try { context.startActivity(intent) } catch (_: Exception) {}
+                try {
+                    val intent = Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(selectedUri, "application/vnd.android.package-archive")
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    }
+                    context.startActivity(intent)
+                } catch (_: Exception) {}
             }
         }
     }

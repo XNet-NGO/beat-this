@@ -35,64 +35,85 @@ class AabInstaller(private val context: Context) {
     }
 
     /**
-     * Install from a URI that points to an AAB or APKS file.
-     * Extracts APK entries and installs via PackageInstaller session.
+     * Install from a URI that points to an AAB, APKS, or APK file.
      */
     fun installFromUri(uri: Uri): Result<String> {
         return try {
             val input = context.contentResolver.openInputStream(uri)
                 ?: return Result.failure(Exception("Cannot open file"))
 
+            // Try to extract as zip (AAB/APKS)
             val apkFiles = extractApks(input)
             input.close()
 
-            if (apkFiles.isEmpty()) {
-                return Result.failure(Exception("No APK entries found in bundle"))
+            if (apkFiles.isNotEmpty()) {
+                installApks(apkFiles)
+                apkFiles.forEach { it.delete() }
+                Result.success("Installing ${apkFiles.size} APK(s)...")
+            } else {
+                // Not a zip or no APK entries — treat as single APK
+                val singleInput = context.contentResolver.openInputStream(uri)
+                    ?: return Result.failure(Exception("Cannot reopen file"))
+                installSingleStream(singleInput)
+                singleInput.close()
+                Result.success("Installing APK...")
             }
-
-            installApks(apkFiles)
-            apkFiles.forEach { it.delete() }
-
-            Result.success("Installing ${apkFiles.size} APK(s)...")
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
 
+    /** Install a single APK stream via PackageInstaller */
+    private fun installSingleStream(input: InputStream) {
+        val installer = context.packageManager.packageInstaller
+        val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
+        if (Build.VERSION.SDK_INT >= 31) {
+            params.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
+        }
+
+        val sessionId = installer.createSession(params)
+        val session = installer.openSession(sessionId)
+
+        try {
+            session.openWrite("base.apk", 0, -1).use { out ->
+                input.copyTo(out)
+                session.fsync(out)
+            }
+            val intent = Intent(INSTALL_ACTION).setPackage(context.packageName)
+            val pi = PendingIntent.getBroadcast(context, sessionId, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE)
+            session.commit(pi.intentSender)
+        } catch (e: Exception) {
+            session.abandon()
+            throw e
+        }
+    }
+
     /**
      * Extract all .apk entries from a zip archive (AAB/APKS format).
-     * AABs from bundletool `build-apks` output contain .apk files directly.
+     * Returns empty list if not a valid zip.
      */
     private fun extractApks(input: InputStream): List<File> {
         val extractDir = File(context.cacheDir, "plugin_install").also { it.mkdirs() }
         extractDir.listFiles()?.forEach { it.delete() }
 
         val apks = mutableListOf<File>()
-        val zip = ZipInputStream(input)
-
-        var entry = zip.nextEntry
-        while (entry != null) {
-            val name = entry.name
-            // Extract .apk files (from APKS bundles)
-            // Also extract from splits/ or standalones/ directories
-            if (name.endsWith(".apk") && !entry.isDirectory) {
-                val outFile = File(extractDir, name.substringAfterLast("/"))
-                outFile.outputStream().use { out -> zip.copyTo(out) }
-                apks.add(outFile)
+        try {
+            val zip = ZipInputStream(input)
+            var entry = zip.nextEntry
+            while (entry != null) {
+                val name = entry.name
+                if (name.endsWith(".apk") && !entry.isDirectory) {
+                    val outFile = File(extractDir, name.substringAfterLast("/"))
+                    outFile.outputStream().use { out -> zip.copyTo(out) }
+                    if (outFile.length() > 0) apks.add(outFile)
+                }
+                zip.closeEntry()
+                entry = zip.nextEntry
             }
-            zip.closeEntry()
-            entry = zip.nextEntry
+            zip.close()
+        } catch (_: Exception) {
+            // Not a valid zip — return empty
         }
-        zip.close()
-
-        // If no .apk entries found, the file might be a raw AAB
-        // In that case, try treating the whole file as a single APK
-        if (apks.isEmpty()) {
-            val singleApk = File(extractDir, "base.apk")
-            context.contentResolver.openInputStream(Uri.EMPTY)?.use { /* noop */ }
-            // Can't install raw AAB without bundletool — return empty
-        }
-
         return apks
     }
 

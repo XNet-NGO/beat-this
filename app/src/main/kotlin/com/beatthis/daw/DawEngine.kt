@@ -51,27 +51,29 @@ class DawEngine(private val context: Context) : MWEngine.IObserver {
     private var bufferSize = 512
 
     fun init() {
-        engine = MWEngine(this)
+        try {
+            engine = MWEngine(this)
 
-        bufferSize = MWEngine.getRecommendedBufferSize(context)
-        sampleRate = MWEngine.getRecommendedSampleRate(context)
+            bufferSize = MWEngine.getRecommendedBufferSize(context)
+            sampleRate = MWEngine.getRecommendedSampleRate(context)
 
-        val driver = if (android.os.Build.VERSION.SDK_INT >= 26) Drivers.types.AAUDIO else Drivers.types.OPENSL
-        engine.createOutput(sampleRate, bufferSize, outputChannels, 1, driver)
+            val driver = if (android.os.Build.VERSION.SDK_INT >= 26) Drivers.types.AAUDIO else Drivers.types.OPENSL
+            engine.createOutput(sampleRate, bufferSize, outputChannels, 1, driver)
 
-        // Setup sequencer
-        sequencer = engine.sequencerController
-        sequencer.setTempoNow(_tempo.value, 4, 4)
-        sequencer.updateMeasures(measures, stepsPerMeasure)
+            sequencer = engine.sequencerController
+            sequencer.setTempoNow(_tempo.value, 4, 4)
+            sequencer.updateMeasures(measures, stepsPerMeasure)
 
-        // Master bus processing
-        val masterBus = engine.masterBusProcessors
-        masterFilter = LPFHPFilter(sampleRate.toFloat(), 40f, outputChannels)
-        masterLimiter = Limiter()
-        masterBus.addProcessor(masterFilter)
-        masterBus.addProcessor(masterLimiter)
+            val masterBus = engine.masterBusProcessors
+            masterFilter = LPFHPFilter(sampleRate.toFloat(), 40f, outputChannels)
+            masterLimiter = Limiter()
+            masterBus.addProcessor(masterFilter)
+            masterBus.addProcessor(masterLimiter)
 
-        engine.start()
+            engine.start()
+        } catch (e: Error) {
+            // MWEngine singleton already exists — reuse it
+        }
     }
 
     // --- TRANSPORT ---
