@@ -40,5 +40,9 @@
                 <data android:mimeType="application/octet-stream" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".plugins.installer.InstallResultActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
     </application>
 </manifest>

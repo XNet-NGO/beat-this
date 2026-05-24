@@ -67,9 +67,6 @@ class AabInstaller(private val context: Context) {
     private fun installSingleStream(input: InputStream) {
         val installer = context.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
-        if (Build.VERSION.SDK_INT >= 31) {
-            params.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
-        }
 
         val sessionId = installer.createSession(params)
         val session = installer.openSession(sessionId)
@@ -79,9 +76,7 @@ class AabInstaller(private val context: Context) {
                 input.copyTo(out)
                 session.fsync(out)
             }
-            val intent = Intent(INSTALL_ACTION).setPackage(context.packageName)
-            val pi = PendingIntent.getBroadcast(context, sessionId, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE)
-            session.commit(pi.intentSender)
+            commitSession(session, sessionId)
         } catch (e: Exception) {
             session.abandon()
             throw e
@@ -119,15 +114,10 @@ class AabInstaller(private val context: Context) {
 
     /**
      * Install multiple APKs as a single session (split APKs).
-     * This installs them as a regular app, not sandboxed.
      */
     private fun installApks(apks: List<File>) {
         val installer = context.packageManager.packageInstaller
-        val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
-            if (Build.VERSION.SDK_INT >= 31) {
-                setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
-            }
-        }
+        val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
 
         val sessionId = installer.createSession(params)
         val session = installer.openSession(sessionId)
@@ -140,18 +130,26 @@ class AabInstaller(private val context: Context) {
                     session.fsync(out)
                 }
             }
-
-            val intent = Intent(INSTALL_ACTION).apply {
-                setPackage(context.packageName)
-            }
-            val pendingIntent = PendingIntent.getBroadcast(
-                context, sessionId, intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
-            )
-            session.commit(pendingIntent.intentSender)
+            commitSession(session, sessionId)
         } catch (e: Exception) {
             session.abandon()
             throw e
         }
+    }
+
+    /**
+     * Commit session with an Activity PendingIntent so the system shows
+     * the install confirmation dialog to the user.
+     */
+    private fun commitSession(session: PackageInstaller.Session, sessionId: Int) {
+        val intent = Intent(context, InstallResultActivity::class.java).apply {
+            action = INSTALL_ACTION
+            putExtra("session_id", sessionId)
+        }
+        val pi = PendingIntent.getActivity(
+            context, sessionId, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+        )
+        session.commit(pi.intentSender)
     }
 }
