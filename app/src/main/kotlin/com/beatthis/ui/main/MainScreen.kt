@@ -416,7 +416,6 @@ private fun AddTrackDialog(onDismiss: () -> Unit, onAdd: (String, TrackType) -> 
 private fun PluginsStudioView(pluginHost: com.beatthis.plugins.host.PluginHost) {
     val instances by pluginHost.instances.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
-    var webViewInstance by remember { mutableStateOf<com.beatthis.plugins.host.PluginInstance?>(null) }
 
     if (instances.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -429,104 +428,55 @@ private fun PluginsStudioView(pluginHost: com.beatthis.plugins.host.PluginHost) 
             }
         }
     } else {
-        Column(Modifier.fillMaxSize()) {
-            // Plugin WebView (if open)
-            if (webViewInstance != null) {
-                Surface(Modifier.fillMaxWidth().weight(1f), tonalElevation = 2.dp) {
-                    Column {
-                        Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(webViewInstance!!.plugin.displayName, style = MaterialTheme.typography.titleSmall)
-                            Spacer(Modifier.weight(1f))
-                            IconButton(onClick = { webViewInstance = null }) { Icon(Icons.Default.Close, null) }
+        LazyColumn(Modifier.fillMaxSize().padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(instances.size) { i ->
+                val instance = instances[i]
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                if (instance.plugin.category == "Instrument") Icons.Default.Piano else Icons.Default.Tune,
+                                null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(instance.plugin.displayName, style = MaterialTheme.typography.titleSmall)
+                                Text("Track ${instance.trackId} | Slot ${instance.slotIndex}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            // Open plugin's native UI
+                            FilledTonalButton(onClick = {
+                                try {
+                                    val launchIntent = context.packageManager.getLaunchIntentForPackage(instance.plugin.packageName)
+                                    launchIntent?.let { context.startActivity(it) }
+                                } catch (_: Exception) {}
+                            }, contentPadding = PaddingValues(horizontal = 12.dp)) {
+                                Icon(Icons.Default.OpenInNew, null, Modifier.size(14.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Open", style = MaterialTheme.typography.labelSmall)
+                            }
+                            Spacer(Modifier.width(4.dp))
+                            IconButton(onClick = { pluginHost.unloadPlugin(instance.id) }, modifier = Modifier.size(32.dp)) {
+                                Icon(Icons.Default.Close, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error)
+                            }
                         }
-                        androidx.compose.ui.viewinterop.AndroidView(
-                            factory = { ctx ->
-                                android.webkit.WebView(ctx).apply {
-                                    settings.javaScriptEnabled = true
-                                    settings.domStorageEnabled = true
-                                    val pkg = webViewInstance!!.plugin.packageName
-                                    val providerUri = "content://$pkg.aap_zip_provider"
-                                    // Load web UI from plugin's content provider
-                                    loadUrl("https://appassets.androidplatform.net/zip/index.html")
-                                    // Set up asset loader for the plugin's zip archive
-                                    webViewClient = object : android.webkit.WebViewClient() {
-                                        override fun shouldInterceptRequest(view: android.webkit.WebView, request: android.webkit.WebResourceRequest): android.webkit.WebResourceResponse? {
-                                            // In full implementation: use WebViewAssetLoader with ZipArchivePathHandler
-                                            return null
-                                        }
-                                    }
-                                }
-                            },
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
-                }
-            }
 
-            // Plugin list
-            LazyColumn(
-                Modifier.let { if (webViewInstance != null) it.weight(0.4f) else it.weight(1f) }.padding(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(instances.size) { i ->
-                    val instance = instances[i]
-                    Card(Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(12.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    if (instance.plugin.category == "Instrument") Icons.Default.Piano else Icons.Default.Tune,
-                                    null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Column(Modifier.weight(1f)) {
-                                    Text(instance.plugin.displayName, style = MaterialTheme.typography.titleSmall)
-                                    Text("Track ${instance.trackId} | Slot ${instance.slotIndex}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                                // Open plugin's native UI activity
-                                IconButton(onClick = {
-                                    try {
-                                        val intent = android.content.Intent().apply {
-                                            component = android.content.ComponentName(
-                                                instance.plugin.packageName,
-                                                "org.androidaudioplugin.ui.compose.app.PluginManagerActivity"
-                                            )
-                                        }
-                                        context.startActivity(intent)
-                                    } catch (_: Exception) {
-                                        // Try launching default activity
-                                        val launchIntent = context.packageManager.getLaunchIntentForPackage(instance.plugin.packageName)
-                                        launchIntent?.let { context.startActivity(it) }
-                                    }
-                                }) {
-                                    Icon(Icons.Default.OpenInNew, "Open UI")
-                                }
-                                // Open embedded web UI
-                                IconButton(onClick = { webViewInstance = instance }) {
-                                    Icon(Icons.Default.Web, "Web UI")
-                                }
-                                IconButton(onClick = { pluginHost.unloadPlugin(instance.id) }) {
-                                    Icon(Icons.Default.Close, null, tint = MaterialTheme.colorScheme.error)
+                        // Params
+                        if (instance.plugin.parameters.isNotEmpty()) {
+                            Spacer(Modifier.height(8.dp))
+                            for (param in instance.plugin.parameters.take(6)) {
+                                var value by remember { mutableFloatStateOf(instance.paramValues[param.id] ?: param.default.toFloat()) }
+                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(param.name, Modifier.width(90.dp), style = MaterialTheme.typography.bodySmall, maxLines = 1)
+                                    Slider(
+                                        value = value,
+                                        onValueChange = { value = it; pluginHost.setParameter(instance.id, param.id, it) },
+                                        valueRange = param.min.toFloat()..param.max.toFloat(),
+                                        modifier = Modifier.weight(1f)
+                                    )
                                 }
                             }
-
-                            // Params
-                            if (instance.plugin.parameters.isNotEmpty()) {
-                                Spacer(Modifier.height(8.dp))
-                                for (param in instance.plugin.parameters.take(6)) {
-                                    var value by remember { mutableFloatStateOf(instance.paramValues[param.id] ?: param.default.toFloat()) }
-                                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                        Text(param.name, Modifier.width(90.dp), style = MaterialTheme.typography.bodySmall, maxLines = 1)
-                                        Slider(
-                                            value = value,
-                                            onValueChange = { value = it; pluginHost.setParameter(instance.id, param.id, it) },
-                                            valueRange = param.min.toFloat()..param.max.toFloat(),
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                    }
-                                }
-                                if (instance.plugin.parameters.size > 6) {
-                                    Text("+ ${instance.plugin.parameters.size - 6} more", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
+                            if (instance.plugin.parameters.size > 6) {
+                                Text("+ ${instance.plugin.parameters.size - 6} more", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
