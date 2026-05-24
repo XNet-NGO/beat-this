@@ -84,8 +84,14 @@ class PluginScanner(private val context: Context) {
                         currentDev = xp.getAttributeValue(null, "developer")
                         currentCat = xp.getAttributeValue(null, "category")
                         currentVer = xp.getAttributeValue(null, "version")
-                        currentViewFactory = xp.getAttributeValue(null, "ui-view-factory")
-                            ?: xp.getAttributeValue("urn:org.androidaudioplugin.port", "ui-view-factory")
+                        // ui-view-factory can be in various namespaces
+                        currentViewFactory = null
+                        for (a in 0 until xp.attributeCount) {
+                            if (xp.getAttributeName(a) == "ui-view-factory") {
+                                currentViewFactory = xp.getAttributeValue(a)
+                                break
+                            }
+                        }
                         ports.clear()
                         params.clear()
                     }
