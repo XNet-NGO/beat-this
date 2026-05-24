@@ -30,9 +30,11 @@ class InProcessPluginLoader(private val context: Context) {
         val pluginContext = createPluginContext(packageName)
         val classLoader = getOrCreateClassLoader(packageName, pluginContext)
 
-        // Load aap-core native lib first (required by ViewFactory internals)
-        loadNativeFromApk(packageName, "androidaudioplugin")
-        loadNativeFromApk(packageName, "androidaudioplugin-ui")
+        // Load native libs via plugin's classloader
+        val libNames = listOf("c++_shared", "oboe", "androidaudioplugin", "androidaudioplugin-manager", "juce_jni")
+        for (lib in libNames) {
+            loadNativeFromApk(packageName, lib)
+        }
 
         // Instantiate ViewFactory
         val cls = classLoader.loadClass(viewFactoryClass)
@@ -89,14 +91,10 @@ class InProcessPluginLoader(private val context: Context) {
             val loadLib = Runtime::class.java.getDeclaredMethod("loadLibrary0", ClassLoader::class.java, String::class.java)
             loadLib.isAccessible = true
             loadLib.invoke(runtime, classLoader, libName)
+        } catch (_: UnsatisfiedLinkError) {
+            // Already loaded — fine
         } catch (_: Exception) {
-            // Try direct path as fallback
-            try {
-                val libDir = getNativeLibDir(packageName)
-                if (libDir != null) {
-                    System.load("$libDir/lib$libName.so")
-                }
-            } catch (_: Exception) {}
+            // Reflection failed or lib not found — non-fatal
         }
     }
 }
