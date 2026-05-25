@@ -20,6 +20,8 @@ import androidx.navigation.compose.rememberNavController
 import com.beatthis.ui.main.MainScreen
 import com.beatthis.ui.generate.GenerateScreen
 import com.beatthis.ui.compose.ComposeScreen
+import com.beatthis.ui.chat.ChatScreen
+import com.beatthis.ui.chat.ChatViewModel
 import com.beatthis.ui.settings.SettingsScreen
 import com.beatthis.ui.theme.BeatThisTheme
 import com.beatthis.ui.viewmodel.MainViewModel
@@ -58,8 +60,9 @@ fun BeatThisApp(incomingIntent: Intent? = null) {
 
     val tabs = listOf(
         Triple("studio", "Studio", Icons.Default.MusicNote),
-        Triple("generate", "Generate", Icons.Default.AutoAwesome),
-        Triple("compose", "Compose", Icons.Default.Chat),
+        Triple("ai", "AI", Icons.Default.AutoAwesome),
+        Triple("generate", "Generate", Icons.Default.GraphicEq),
+        Triple("compose", "Compose", Icons.Default.Piano),
         Triple("plugins", "Plugins", Icons.Default.Extension),
         Triple("settings", "Settings", Icons.Default.Settings),
     )
@@ -102,6 +105,11 @@ fun BeatThisApp(incomingIntent: Intent? = null) {
     ) { padding ->
         NavHost(navController, startDestination = "studio", Modifier.padding(padding)) {
             composable("studio") { MainScreen(vm) }
+            composable("ai") {
+                val chatVm: ChatViewModel = viewModel()
+                LaunchedEffect(Unit) { chatVm.dawExecutor = { name, args -> vm.executeDawTool(name, args) } }
+                ChatScreen(chatVm)
+            }
             composable("generate") { GenerateScreen(vm) }
             composable("compose") { ComposeScreen(vm) }
             composable("plugins") { com.beatthis.ui.plugins.PluginBrowserScreen(vm) }

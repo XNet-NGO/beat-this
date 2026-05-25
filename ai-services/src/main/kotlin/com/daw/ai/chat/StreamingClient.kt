@@ -58,8 +58,12 @@ class StreamingClient(private val apiKey: String) {
         val body = JSONObject().apply {
             put("model", model)
             put("stream", true)
+            put("reasoning_effort", "high")
             put("temperature", 0.3)
+            put("top_p", 0.9)
             put("max_tokens", 16384)
+            put("frequency_penalty", 0.1)
+            put("presence_penalty", 0.1)
             put("messages", JSONArray(messages))
             if (tools.isNotEmpty()) put("tools", JSONArray(tools))
         }.toString()

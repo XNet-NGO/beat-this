@@ -57,12 +57,37 @@ fun MainScreen(vm: MainViewModel) {
                 val lengthBars by vm.pianoLengthBars.collectAsState()
                 PianoRollView(importedNotes = importedNotes, lengthBars = lengthBars, modifier = Modifier.fillMaxSize())
             }
-            StudioView.DRUMS -> StepSequencerView(remember {
-                DrumPattern(1, tracks = mutableListOf(
-                    DrumTrackRow("Kick", 36), DrumTrackRow("Snare", 38), DrumTrackRow("HiHat", 42),
-                    DrumTrackRow("Clap", 39), DrumTrackRow("Tom", 45), DrumTrackRow("Rim", 37),
-                ))
-            }, modifier = Modifier.fillMaxSize())
+            StudioView.DRUMS -> {
+                var showPads by remember { mutableStateOf(true) }
+                Column(Modifier.fillMaxSize()) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        androidx.compose.material3.FilterChip(
+                            selected = showPads,
+                            onClick = { showPads = true },
+                            label = { Text("Pads") }
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        androidx.compose.material3.FilterChip(
+                            selected = !showPads,
+                            onClick = { showPads = false },
+                            label = { Text("Sequencer") }
+                        )
+                    }
+                    if (showPads) {
+                        com.beatthis.ui.drums.DrumPadView(Modifier.fillMaxSize())
+                    } else {
+                        StepSequencerView(remember {
+                            DrumPattern(1, tracks = mutableListOf(
+                                DrumTrackRow("Kick", 36), DrumTrackRow("Snare", 38), DrumTrackRow("HiHat", 42),
+                                DrumTrackRow("Clap", 39), DrumTrackRow("Tom", 45), DrumTrackRow("Rim", 37),
+                            ))
+                        }, modifier = Modifier.fillMaxSize())
+                    }
+                }
+            }
             StudioView.MIXER -> MixerView(engine, vm.pluginHost)
             StudioView.PLUGINS -> PluginsStudioView(vm.pluginHost)
         }

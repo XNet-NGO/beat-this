@@ -10,6 +10,7 @@ import com.beatthis.BuildConfig
 import com.beatthis.audio.*
 import com.beatthis.daw.DawEngine
 import com.beatthis.daw.VoiceCommandExecutor
+import com.beatthis.daw.*
 import com.beatthis.plugins.discovery.AapPluginInfo
 import com.beatthis.plugins.host.PluginHost
 import com.beatthis.plugins.host.PluginInstance
@@ -190,6 +191,89 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: Exception) {
                 _status.value = "✗ ${e.message?.take(60)}"
             }
+        }
+    }
+
+    /** Execute a DAW tool by name + args map — used by ChatViewModel's streaming orchestrator */
+    fun executeDawTool(name: String, args: Map<String, Any?>): String {
+        return when (name) {
+            "set_tempo" -> {
+                val bpm = (args["bpm"] as? Number)?.toFloat() ?: 120f
+                dawEngine.setTempo(bpm); "Tempo set to ${bpm.toInt()} BPM"
+            }
+            "add_track" -> {
+                val type = when (args["type"]?.toString()) {
+                    "audio" -> TrackType.AUDIO; "drum" -> TrackType.SAMPLER; else -> TrackType.SYNTH
+                }
+                val trackName = args["name"]?.toString() ?: "Track ${dawEngine.tracks.value.size + 1}"
+                dawEngine.addTrack(trackName, type); "Added $type track: $trackName"
+            }
+            "remove_track" -> {
+                val id = (args["track"] as? Number)?.toInt() ?: return "Missing track number"
+                dawEngine.removeTrack(id); "Removed track $id"
+            }
+            "mute_track" -> {
+                val id = (args["track"] as? Number)?.toInt() ?: return "Missing track"
+                val mute = args["mute"] as? Boolean ?: true
+                dawEngine.getTrack(id)?.let { it.muted = mute; "Track ${it.name} ${if (mute) "muted" else "unmuted"}" } ?: "Track not found"
+            }
+            "solo_track" -> {
+                val id = (args["track"] as? Number)?.toInt() ?: return "Missing track"
+                val solo = args["solo"] as? Boolean ?: true
+                dawEngine.getTrack(id)?.let { it.solo = solo; "Track ${it.name} ${if (solo) "soloed" else "unsoloed"}" } ?: "Track not found"
+            }
+            "set_volume" -> {
+                val id = (args["track"] as? Number)?.toInt() ?: return "Missing track"
+                val db = (args["db"] as? Number)?.toFloat() ?: 0f
+                dawEngine.getTrack(id)?.let { it.volume = db; "Track ${it.name} volume: ${db}dB" } ?: "Track not found"
+            }
+            "set_pan" -> {
+                val id = (args["track"] as? Number)?.toInt() ?: return "Missing track"
+                val pan = (args["pan"] as? Number)?.toFloat() ?: 0f
+                dawEngine.getTrack(id)?.let { it.pan = pan; "Track ${it.name} pan: $pan" } ?: "Track not found"
+            }
+            "add_effect" -> {
+                val id = (args["track"] as? Number)?.toInt() ?: return "Missing track"
+                val effectName = args["effect"]?.toString() ?: "reverb"
+                val effectType = EffectType.entries.find { it.name.equals(effectName, true) } ?: EffectType.REVERB
+                dawEngine.getTrack(id)?.let { it.effects.add(DawEffect(effectType)); "Added $effectName to ${it.name}" } ?: "Track not found"
+            }
+            "remove_effect" -> {
+                val id = (args["track"] as? Number)?.toInt() ?: return "Missing track"
+                val slot = (args["slot"] as? Number)?.toInt()?.minus(1) ?: return "Missing slot"
+                dawEngine.getTrack(id)?.let {
+                    if (slot in it.effects.indices) { it.effects.removeAt(slot); "Removed effect slot ${slot + 1} from ${it.name}" }
+                    else "Invalid slot"
+                } ?: "Track not found"
+            }
+            "record" -> { dawEngine.record(); "Recording" }
+            "play" -> { dawEngine.play(); "Playing" }
+            "stop" -> { dawEngine.stop(); "Stopped" }
+            "loop" -> {
+                dawEngine.toggleLoop()
+                "Loop ${if (dawEngine.loopEnabled.value) "enabled" else "disabled"}"
+            }
+            "set_time_signature" -> {
+                val num = (args["numerator"] as? Number)?.toInt() ?: 4
+                val den = (args["denominator"] as? Number)?.toInt() ?: 4
+                "Time signature set to $num/$den"
+            }
+            "generate_music" -> {
+                val prompt = args["prompt"]?.toString() ?: return "Missing prompt"
+                val dur = (args["duration_sec"] as? Number)?.toInt()
+                viewModelScope.launch { generateInstrumental(prompt, dur, -1L) }
+                "Generating music: $prompt"
+            }
+            "generate_vocals" -> {
+                val text = args["text"]?.toString() ?: return "Missing text"
+                val voice = args["voice"]?.toString()
+                viewModelScope.launch { generateVocals(text, null, -1L, voice) }
+                "Generating vocals"
+            }
+            "export_mixdown" -> { exportMixdown(); "Exporting mixdown" }
+            "undo" -> "Undo not yet implemented"
+            "redo" -> "Redo not yet implemented"
+            else -> "Unknown tool: $name"
         }
     }
 
