@@ -1,34 +1,64 @@
 package com.beatthis.audio
 
 import android.content.Context
-import nl.igorski.mwengine.core.*
+import android.media.AudioAttributes
+import android.media.AudioFormat
+import android.media.AudioTrack
+import java.io.File
+import java.io.RandomAccessFile
 
 /**
- * Drum sampler using MWEngine's SampleManager.
- * Pre-creates one SampleEvent per pad and reuses them.
+ * Drum sampler — loads WAV PCM data into memory, plays via AudioTrack.
+ * Unlimited retriggers, no MWEngine sequencer dependency.
  */
 class DrumSampler(context: Context) {
 
-    private val instrument = SampledInstrument()
-    private val events = mutableMapOf<Int, SampleEvent>()
+    private val samples = mutableMapOf<Int, ShortArray>()
 
     init {
-        // Large max buffer so playback doesn't stop after a few hits
-        instrument.audioChannel = AudioChannel(1f, Int.MAX_VALUE)
         val paths = DrumKitGenerator.ensureKit(context)
         paths.forEach { (pitch, path) ->
-            val key = "drum_$pitch"
-            if (JavaUtilities.createSampleFromFile(key, path)) {
-                val sample = SampleManager.getSample(key) ?: return@forEach
-                val event = SampleEvent(instrument)
-                event.setSample(sample)
-                events[pitch] = event
-            }
+            samples[pitch] = readPcm(File(path))
         }
     }
 
-    /** Trigger a drum hit by MIDI pitch */
     fun play(pitch: Int) {
-        events[pitch]?.play()
+        val pcm = samples[pitch] ?: return
+        Thread {
+            val track = AudioTrack.Builder()
+                .setAudioAttributes(AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build())
+                .setAudioFormat(AudioFormat.Builder()
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                    .setSampleRate(44100)
+                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                    .build())
+                .setBufferSizeInBytes(pcm.size * 2)
+                .setTransferMode(AudioTrack.MODE_STATIC)
+                .build()
+            track.write(pcm, 0, pcm.size)
+            track.setNotificationMarkerPosition(pcm.size)
+            track.setPlaybackPositionUpdateListener(object : AudioTrack.OnPlaybackPositionUpdateListener {
+                override fun onMarkerReached(t: AudioTrack) { t.release() }
+                override fun onPeriodicNotification(t: AudioTrack) {}
+            })
+            track.play()
+        }.start()
+    }
+
+    private fun readPcm(file: File): ShortArray {
+        val raf = RandomAccessFile(file, "r")
+        raf.seek(44) // skip WAV header
+        val count = ((raf.length() - 44) / 2).toInt()
+        val pcm = ShortArray(count)
+        for (i in 0 until count) {
+            val lo = raf.read()
+            val hi = raf.read()
+            pcm[i] = ((hi shl 8) or lo).toShort()
+        }
+        raf.close()
+        return pcm
     }
 }
