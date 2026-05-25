@@ -524,7 +524,19 @@ private fun PluginsStudioView(pluginHost: com.beatthis.plugins.host.PluginHost) 
                                     val modifiedHtml = indexHtml.replace("<head>", "<head><script>$initScript</script>")
                                     zipContents["index.html"] = modifiedHtml.toByteArray()
 
-                                    loadUrl("https://appassets.androidplatform.net/zip/index.html")
+                                    // Log JS errors
+                                    webChromeClient = object : android.webkit.WebChromeClient() {
+                                        override fun onConsoleMessage(msg: android.webkit.ConsoleMessage): Boolean {
+                                            android.util.Log.d("PluginWebUI", "${msg.messageLevel()}: ${msg.message()} [${msg.lineNumber()}]")
+                                            return true
+                                        }
+                                    }
+
+                                    if (zipContents.isEmpty()) {
+                                        loadData("<html><body style='color:white;padding:16px'><h3>Web UI zip empty</h3><p>ContentProvider returned no data</p></body></html>", "text/html", "UTF-8")
+                                    } else {
+                                        loadUrl("https://appassets.androidplatform.net/zip/index.html")
+                                    }
                                 }
                             },
                             modifier = Modifier.fillMaxSize()

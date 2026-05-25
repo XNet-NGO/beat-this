@@ -13,6 +13,7 @@
         <intent>
             <action android:name="org.androidaudioplugin.AudioPluginService" />
         </intent>
+        <package android:name="org.androidaudioplugin.ports.juce.hera" />
     </queries>
 
     <application
