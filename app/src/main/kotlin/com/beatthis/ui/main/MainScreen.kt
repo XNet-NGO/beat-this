@@ -443,8 +443,6 @@ private fun PluginsStudioView(pluginHost: com.beatthis.plugins.host.PluginHost) 
                             }
                         }
                         // Render plugin UI via WebView (loads from plugin's ContentProvider)
-                        val viewFactory = inst.plugin.uiViewFactory
-                            ?: "org.androidaudioplugin.juce.JuceAudioPluginViewFactory"
                         androidx.compose.ui.viewinterop.AndroidView(
                             factory = { ctx ->
                                 android.webkit.WebView(ctx).apply {
@@ -452,40 +450,44 @@ private fun PluginsStudioView(pluginHost: com.beatthis.plugins.host.PluginHost) 
                                     settings.domStorageEnabled = true
                                     settings.allowContentAccess = true
                                     val pkg = inst.plugin.packageName
-                                    // AAP plugins serve web UI via ContentProvider
-                                    val providerUri = "content://$pkg.aap_zip_provider/org.androidaudioplugin.ui.web/web-ui.zip"
-                                    // Use WebViewAssetLoader pattern with custom path handler
+
+                                    // Cache zip contents in memory
+                                    val zipContents = mutableMapOf<String, ByteArray>()
+                                    try {
+                                        val zipUri = android.net.Uri.parse("content://$pkg.aap_zip_provider/org.androidaudioplugin.ui.web/web-ui.zip")
+                                        val pfd = ctx.contentResolver.openFile(zipUri, "r", null)
+                                        if (pfd != null) {
+                                            val zipStream = java.util.zip.ZipInputStream(java.io.FileInputStream(pfd.fileDescriptor))
+                                            var entry = zipStream.nextEntry
+                                            while (entry != null) {
+                                                if (!entry.isDirectory) {
+                                                    zipContents[entry.name] = zipStream.readBytes()
+                                                }
+                                                zipStream.closeEntry()
+                                                entry = zipStream.nextEntry
+                                            }
+                                            zipStream.close()
+                                            pfd.close()
+                                        }
+                                    } catch (_: Exception) {}
+
                                     webViewClient = object : android.webkit.WebViewClient() {
                                         override fun shouldInterceptRequest(view: android.webkit.WebView, request: android.webkit.WebResourceRequest): android.webkit.WebResourceResponse? {
                                             val url = request.url.toString()
-                                            if (url.contains("/zip/")) {
-                                                try {
-                                                    val path = url.substringAfter("/zip/")
-                                                    val zipUri = android.net.Uri.parse("content://$pkg.aap_zip_provider/org.androidaudioplugin.ui.web/web-ui.zip")
-                                                    val pfd = ctx.contentResolver.openFile(zipUri, "r", null)
-                                                    if (pfd != null) {
-                                                        val zipStream = java.util.zip.ZipInputStream(java.io.FileInputStream(pfd.fileDescriptor))
-                                                        var entry = zipStream.nextEntry
-                                                        while (entry != null) {
-                                                            if (entry.name == path || entry.name == path.removePrefix("/")) {
-                                                                val data = zipStream.readBytes()
-                                                                val mime = when {
-                                                                    path.endsWith(".html") -> "text/html"
-                                                                    path.endsWith(".js") -> "application/javascript"
-                                                                    path.endsWith(".css") -> "text/css"
-                                                                    path.endsWith(".png") -> "image/png"
-                                                                    path.endsWith(".svg") -> "image/svg+xml"
-                                                                    else -> "application/octet-stream"
-                                                                }
-                                                                pfd.close()
-                                                                return android.webkit.WebResourceResponse(mime, "UTF-8", java.io.ByteArrayInputStream(data))
-                                                            }
-                                                            zipStream.closeEntry()
-                                                            entry = zipStream.nextEntry
-                                                        }
-                                                        pfd.close()
+                                            if (url.contains("appassets.androidplatform.net/zip/")) {
+                                                val path = url.substringAfter("/zip/")
+                                                val data = zipContents[path]
+                                                if (data != null) {
+                                                    val mime = when {
+                                                        path.endsWith(".html") -> "text/html"
+                                                        path.endsWith(".js") -> "application/javascript"
+                                                        path.endsWith(".css") -> "text/css"
+                                                        path.endsWith(".png") -> "image/png"
+                                                        path.endsWith(".svg") -> "image/svg+xml"
+                                                        else -> "application/octet-stream"
                                                     }
-                                                } catch (_: Exception) {}
+                                                    return android.webkit.WebResourceResponse(mime, "UTF-8", java.io.ByteArrayInputStream(data))
+                                                }
                                             }
                                             return null
                                         }
