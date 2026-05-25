@@ -500,7 +500,20 @@ private fun PluginsStudioView(pluginHost: com.beatthis.plugins.host.PluginHost) 
                                     }
 
                                     // Inject AAPInterop JS interface before page loads
-                                    val paramJson = params.joinToString(",") { p ->
+                                    // Hera has 26 params (discovered from its native UI)
+                                    val heraParams = listOf(
+                                        "VCA depth","VCA type","DCO PWM depth","DCO PWM modulator",
+                                        "DCO saw level","DCO pulse level","DCO sub level","DCO noise level",
+                                        "DCO range","DCO pitch mod depth","VCF cutoff","VCF resonance",
+                                        "VCF envelope mod depth","VCF LFO mod depth","VCF keyboard mod depth","VCF bend depth",
+                                        "Envelope attack","Envelope decay","Envelope sustain","Envelope release",
+                                        "LFO trigger mode","LFO rate","LFO delay","HPF","Chorus I","Chorus II"
+                                    )
+                                    val effectiveParams = if (params.isNotEmpty()) params else heraParams.mapIndexed { i, name ->
+                                        com.beatthis.plugins.discovery.ParamInfo(i, name, 0.0, 1.0, 0.5)
+                                    }
+
+                                    val paramJson = effectiveParams.joinToString(",") { p ->
                                         "{name:'${p.name.replace("'", "\\'")}',min:${p.min},max:${p.max},def:${p.default}}"
                                     }
                                     val initScript = """
