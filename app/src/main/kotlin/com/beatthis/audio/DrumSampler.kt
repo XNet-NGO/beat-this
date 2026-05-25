@@ -5,16 +5,15 @@ import nl.igorski.mwengine.core.*
 
 /**
  * Drum sampler using MWEngine's SampleManager.
- * Loads WAV samples and triggers them as live SampleEvents.
+ * Pre-creates one SampleEvent per pad and reuses them.
  */
 class DrumSampler(context: Context) {
 
     private val instrument = SampledInstrument()
+    private val events = mutableMapOf<Int, SampleEvent>()
     private val samplePaths: Map<Int, String>
-    private var loaded = false
 
     init {
-        // Instrument needs an AudioChannel to produce output
         instrument.audioChannel = AudioChannel(1f)
         samplePaths = DrumKitGenerator.ensureKit(context)
         loadAll()
@@ -24,17 +23,16 @@ class DrumSampler(context: Context) {
         samplePaths.forEach { (pitch, path) ->
             val key = "drum_$pitch"
             if (JavaUtilities.createSampleFromFile(key, path)) {
-                loaded = true
+                val sample = SampleManager.getSample(key) ?: return@forEach
+                val event = SampleEvent(instrument)
+                event.setSample(sample)
+                events[pitch] = event
             }
         }
     }
 
-    /** Trigger a drum hit by MIDI pitch */
+    /** Trigger a drum hit by MIDI pitch — replays from start */
     fun play(pitch: Int) {
-        val key = "drum_$pitch"
-        val sample = SampleManager.getSample(key) ?: return
-        val event = SampleEvent(instrument)
-        event.setSample(sample)
-        event.play()
+        events[pitch]?.play()
     }
 }
