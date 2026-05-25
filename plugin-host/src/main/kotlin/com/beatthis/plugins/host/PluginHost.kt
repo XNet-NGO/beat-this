@@ -10,11 +10,13 @@ import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Full AAP plugin host — manages plugin lifecycle, parameters, and insert routing.
+ * Uses aap-core's native hosting for real audio processing.
  */
-class PluginHost(context: Context) {
+class PluginHost(private val context: Context) {
 
     private val connection = PluginConnection(context)
     private val bridge = NativePluginBridge()
+    private val nativeHosts = mutableMapOf<String, NativeAapHost>()
 
     private val _instances = MutableStateFlow<List<PluginInstance>>(emptyList())
     val instances = _instances.asStateFlow()
@@ -22,12 +24,21 @@ class PluginHost(context: Context) {
     /** Load a plugin into a track's insert slot */
     suspend fun loadPlugin(plugin: AapPluginInfo, trackId: Int, slotIndex: Int): PluginInstance {
         val bound = connection.connect(plugin)
-
-        // Create shared memory buffer for audio exchange (1024 frames, stereo)
         val bridgeIndex = bridge.createBuffer(1024, 2)
 
+        // Create native AAP host for real audio
+        val nativeHost = NativeAapHost(context)
+        try {
+            nativeHost.instantiate(plugin.packageName, plugin.serviceName, plugin.pluginId)
+        } catch (e: Exception) {
+            android.util.Log.w("PluginHost", "Native instantiation failed: ${e.message}")
+        }
+
+        val instanceId = "${plugin.pluginId}_${System.currentTimeMillis()}"
+        nativeHosts[instanceId] = nativeHost
+
         val instance = PluginInstance(
-            id = "${plugin.pluginId}_${System.currentTimeMillis()}",
+            id = instanceId,
             plugin = plugin,
             bound = bound,
             trackId = trackId,
@@ -43,18 +54,18 @@ class PluginHost(context: Context) {
     fun unloadPlugin(instanceId: String) {
         val instance = _instances.value.find { it.id == instanceId } ?: return
         if (instance.bridgeIndex >= 0) bridge.destroyBuffer(instance.bridgeIndex)
+        nativeHosts.remove(instanceId)?.destroy()
         connection.disconnect(instance.plugin.pluginId)
         _instances.value = _instances.value.filter { it.id != instanceId }
     }
 
-    /** Process audio through a plugin (write input, trigger process, read output) */
+    /** Process audio through a plugin's native host */
     fun processAudio(instanceId: String, audio: FloatArray, frames: Int) {
-        val instance = _instances.value.find { it.id == instanceId } ?: return
-        if (instance.bridgeIndex < 0) return
-        bridge.writeAudio(instance.bridgeIndex, audio, frames)
-        // In full AAP: send process request via Binder, plugin reads shared mem, processes, writes back
-        // For now the buffer round-trips (passthrough until Binder process call is wired)
-        bridge.readAudio(instance.bridgeIndex, audio, frames)
+        val host = nativeHosts[instanceId]
+        if (host != null && host.isActive) {
+            host.process()
+            System.arraycopy(host.outputBuffer, 0, audio, 0, minOf(audio.size, host.outputBuffer.size))
+        }
     }
 
     /** Process audio through all plugins on a track in insert order */
@@ -72,15 +83,21 @@ class PluginHost(context: Context) {
     fun setParameter(instanceId: String, paramId: Int, value: Float) {
         val instance = _instances.value.find { it.id == instanceId } ?: return
         instance.paramValues[paramId] = value
+        nativeHosts[instanceId]?.setParameter(paramId, value)
     }
 
-    /** Send MIDI message — routes through callback for audio */
+    /** Send MIDI message to plugin's native host */
     fun sendMidi(instanceId: String, status: Int, data1: Int, data2: Int) {
         val instance = _instances.value.find { it.id == instanceId } ?: return
-        val trackId = instance.trackId
+        val host = nativeHosts[instanceId]
         val command = status and 0xF0
         when (command) {
-            0x90 -> if (data2 > 0) midiCallback?.onNoteOn(trackId, data1, data2) else midiCallback?.onNoteOff(data1)
+            0x90 -> host?.sendMidiNote(data2 > 0, status and 0x0F, data1, data2)
+            0x80 -> host?.sendMidiNote(false, status and 0x0F, data1, 0)
+        }
+        // Also notify callback for fallback audio
+        when (command) {
+            0x90 -> if (data2 > 0) midiCallback?.onNoteOn(instance.trackId, data1, data2) else midiCallback?.onNoteOff(data1)
             0x80 -> midiCallback?.onNoteOff(data1)
         }
     }
@@ -98,7 +115,11 @@ class PluginHost(context: Context) {
         return instance.paramValues[paramId] ?: 0f
     }
 
-    fun destroy() { connection.disconnectAll() }
+    fun destroy() {
+        nativeHosts.values.forEach { it.destroy() }
+        nativeHosts.clear()
+        connection.disconnectAll()
+    }
 }
 
 data class PluginInstance(
