@@ -214,10 +214,15 @@ class DawEngine(private val context: Context) : MWEngine.IObserver {
     }
 
     /** Load a WAV file into SampleManager */
-    fun loadSample(file: File, name: String) {
-        // SampleManager.setSample requires an AudioBuffer — for now, track the file path
-        // Full implementation requires reading WAV into native AudioBuffer via JNI
-        // This is handled when MWEngine's JavaUtilities.createSampleFromFile is available
+    fun loadSample(file: java.io.File, name: String): Boolean {
+        return nl.igorski.mwengine.core.JavaUtilities.createSampleFromFile(name, file.absolutePath)
+    }
+
+    /** Load a WAV from assets into SampleManager */
+    fun loadSampleFromAsset(context: android.content.Context, assetName: String, key: String): Boolean {
+        return nl.igorski.mwengine.core.JavaUtilities.createSampleFromAsset(
+            key, context.assets, context.cacheDir.absolutePath, assetName
+        )
     }
 
     // --- EFFECTS ---

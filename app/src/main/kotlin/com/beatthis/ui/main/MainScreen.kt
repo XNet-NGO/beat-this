@@ -59,6 +59,8 @@ fun MainScreen(vm: MainViewModel) {
             }
             StudioView.DRUMS -> {
                 var showPads by remember { mutableStateOf(true) }
+                val ctx = LocalContext.current
+                val drumSampler = remember { com.beatthis.audio.DrumSampler(ctx) }
                 Column(Modifier.fillMaxSize()) {
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
@@ -77,7 +79,7 @@ fun MainScreen(vm: MainViewModel) {
                         )
                     }
                     if (showPads) {
-                        com.beatthis.ui.drums.DrumPadView(Modifier.fillMaxSize())
+                        com.beatthis.ui.drums.DrumPadView(Modifier.fillMaxSize(), sampler = drumSampler)
                     } else {
                         StepSequencerView(remember {
                             DrumPattern(1, tracks = mutableListOf(
