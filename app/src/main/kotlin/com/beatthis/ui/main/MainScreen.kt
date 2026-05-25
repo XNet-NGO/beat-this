@@ -450,6 +450,7 @@ private fun PluginsStudioView(pluginHost: com.beatthis.plugins.host.PluginHost) 
                                     settings.domStorageEnabled = true
                                     settings.allowContentAccess = true
                                     val pkg = inst.plugin.packageName
+                                    val params = inst.plugin.parameters
 
                                     // Cache zip contents in memory
                                     val zipContents = mutableMapOf<String, ByteArray>()
@@ -475,7 +476,9 @@ private fun PluginsStudioView(pluginHost: com.beatthis.plugins.host.PluginHost) 
                                         override fun shouldInterceptRequest(view: android.webkit.WebView, request: android.webkit.WebResourceRequest): android.webkit.WebResourceResponse? {
                                             val url = request.url.toString()
                                             if (url.contains("appassets.androidplatform.net/zip/")) {
-                                                val path = url.substringAfter("/zip/")
+                                                var path = url.substringAfter("/zip/")
+                                                // Handle typo in Hera's HTML
+                                                if (path == "webcoomponents-lite.js") path = "webcomponents-lite.js"
                                                 val data = zipContents[path]
                                                 if (data != null) {
                                                     val mime = when {
@@ -483,7 +486,6 @@ private fun PluginsStudioView(pluginHost: com.beatthis.plugins.host.PluginHost) 
                                                         path.endsWith(".js") -> "application/javascript"
                                                         path.endsWith(".css") -> "text/css"
                                                         path.endsWith(".png") -> "image/png"
-                                                        path.endsWith(".svg") -> "image/svg+xml"
                                                         else -> "application/octet-stream"
                                                     }
                                                     return android.webkit.WebResourceResponse(mime, "UTF-8", java.io.ByteArrayInputStream(data))
@@ -491,7 +493,37 @@ private fun PluginsStudioView(pluginHost: com.beatthis.plugins.host.PluginHost) 
                                             }
                                             return null
                                         }
+
+                                        override fun onPageFinished(view: android.webkit.WebView, url: String?) {
+                                            // Inject AAPInterop after page loads (before initialize() runs we inject via evaluateJavascript)
+                                        }
                                     }
+
+                                    // Inject AAPInterop JS interface before page loads
+                                    val paramJson = params.joinToString(",") { p ->
+                                        "{name:'${p.name.replace("'", "\\'")}',min:${p.min},max:${p.max},def:${p.default}}"
+                                    }
+                                    val initScript = """
+                                        var AAPInterop = {
+                                            params: [$paramJson],
+                                            getParameterCount: function() { return this.params.length; },
+                                            getParameter: function(i) {
+                                                var p = this.params[i];
+                                                return { getName:function(){return p.name}, getMinValue:function(){return p.min}, getMaxValue:function(){return p.max}, getDefaultValue:function(){return p.def} };
+                                            },
+                                            setParameter: function(i, v) {},
+                                            sendMidi1: function(data, offset, len) {},
+                                            onInitialize: function() {},
+                                            onShow: function() {},
+                                            onCleanup: function() {}
+                                        };
+                                    """.trimIndent()
+
+                                    // Inject before index.html by prepending to the HTML
+                                    val indexHtml = zipContents["index.html"]?.decodeToString() ?: ""
+                                    val modifiedHtml = indexHtml.replace("<head>", "<head><script>$initScript</script>")
+                                    zipContents["index.html"] = modifiedHtml.toByteArray()
+
                                     loadUrl("https://appassets.androidplatform.net/zip/index.html")
                                 }
                             },
