@@ -159,7 +159,13 @@ class DawEngine(private val context: Context) : MWEngine.IObserver {
     }
 
     fun removeTrack(id: Int) {
+        val track = getTrack(id) ?: return
+        // Remove events for this track
+        val instrument = instruments.getOrNull(track.instrumentIndex)
+        instrument?.audioChannel?.processingChain?.reset()
         _tracks.value = _tracks.value.filter { it.id != id }
+        // Don't remove from instruments list — native engine may still reference it.
+        // It stays alive until destroy().
     }
 
     fun getTrack(id: Int): DawTrack? = _tracks.value.find { it.id == id }
@@ -286,10 +292,14 @@ class DawEngine(private val context: Context) : MWEngine.IObserver {
 
     fun destroy() {
         stop()
-        engine.stop()
-        engine.dispose()
-        instruments.clear()
+        // Clear events first (they reference instruments)
+        liveEvents.values.forEach { try { it.delete() } catch (_: Exception) {} }
+        liveEvents.clear()
         events.clear()
+        // Stop engine before disposing instruments
+        engine.stop()
+        instruments.clear()
+        engine.dispose()
     }
 }
 

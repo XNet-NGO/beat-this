@@ -61,6 +61,33 @@ fun MainScreen(vm: MainViewModel) {
                 var showPads by remember { mutableStateOf(true) }
                 val ctx = LocalContext.current
                 val drumSampler = remember { com.beatthis.audio.DrumSampler(ctx) }
+                val isPlaying by engine.isPlaying.collectAsState()
+                val isRecording by engine.isRecording.collectAsState()
+                val currentStep by engine.currentStep.collectAsState()
+                val pattern = remember { DrumPattern(1, tracks = mutableListOf(
+                    DrumTrackRow("Kick", 36), DrumTrackRow("Snare", 38), DrumTrackRow("HiHat", 42),
+                    DrumTrackRow("Clap", 39), DrumTrackRow("Tom", 45), DrumTrackRow("Rim", 37),
+                    DrumTrackRow("HiHat O", 46), DrumTrackRow("Tom Hi", 50),
+                )) }
+
+                // Record pad hits into pattern at current step
+                val onPadHit: (Int) -> Unit = remember(pattern) { { pitch: Int ->
+                    drumSampler.play(pitch)
+                    if (isRecording) {
+                        val step = currentStep % pattern.steps
+                        pattern.tracks.find { it.pitch == pitch }?.hits?.set(step, true)
+                    }
+                } }
+
+                // Playback: trigger samples on active steps
+                LaunchedEffect(currentStep, isPlaying) {
+                    if (!isPlaying) return@LaunchedEffect
+                    val step = currentStep % pattern.steps
+                    pattern.tracks.forEach { row ->
+                        if (row.hits[step]) drumSampler.play(row.pitch)
+                    }
+                }
+
                 Column(Modifier.fillMaxSize()) {
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
@@ -79,14 +106,9 @@ fun MainScreen(vm: MainViewModel) {
                         )
                     }
                     if (showPads) {
-                        com.beatthis.ui.drums.DrumPadView(Modifier.fillMaxSize(), sampler = drumSampler)
+                        com.beatthis.ui.drums.DrumPadView(Modifier.fillMaxSize(), onHit = onPadHit)
                     } else {
-                        StepSequencerView(remember {
-                            DrumPattern(1, tracks = mutableListOf(
-                                DrumTrackRow("Kick", 36), DrumTrackRow("Snare", 38), DrumTrackRow("HiHat", 42),
-                                DrumTrackRow("Clap", 39), DrumTrackRow("Tom", 45), DrumTrackRow("Rim", 37),
-                            ))
-                        }, modifier = Modifier.fillMaxSize())
+                        StepSequencerView(pattern, modifier = Modifier.fillMaxSize(), sampler = drumSampler)
                     }
                 }
             }

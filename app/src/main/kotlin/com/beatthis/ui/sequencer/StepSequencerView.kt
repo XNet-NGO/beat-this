@@ -27,7 +27,8 @@ import kotlinx.coroutines.isActive
 @Composable
 fun StepSequencerView(
     pattern: DrumPattern,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    sampler: com.beatthis.audio.DrumSampler? = null
 ) {
     var rows by remember { mutableStateOf(pattern.tracks.toList()) }
     var isPlaying by remember { mutableStateOf(false) }
@@ -44,7 +45,10 @@ fun StepSequencerView(
             currentStep = step
             // Trigger sounds for active hits
             rows.forEach { row ->
-                if (row.hits[step]) ToneGenerator.playDrum(row.pitch)
+                if (row.hits[step]) {
+                    if (sampler != null) sampler.play(row.pitch)
+                    else ToneGenerator.playDrum(row.pitch)
+                }
             }
             delay(stepMs)
             step = (step + 1) % pattern.steps
@@ -96,8 +100,10 @@ fun StepSequencerView(
                     currentStep = currentStep,
                     onToggle = { step ->
                         row.hits[step] = !row.hits[step]
-                        // Play sound on tap
-                        if (row.hits[step]) ToneGenerator.playDrum(row.pitch)
+                        if (row.hits[step]) {
+                            if (sampler != null) sampler.play(row.pitch)
+                            else ToneGenerator.playDrum(row.pitch)
+                        }
                         rows = rows.toList()
                     }
                 )

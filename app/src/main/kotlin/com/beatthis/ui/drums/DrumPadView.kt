@@ -18,7 +18,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.beatthis.audio.ToneGenerator
-import com.beatthis.audio.DrumSampler
 
 data class DrumPad(val name: String, val pitch: Int, val color: Color)
 
@@ -46,7 +45,7 @@ private val pads = listOf(
 )
 
 @Composable
-fun DrumPadView(modifier: Modifier = Modifier, sampler: DrumSampler? = null) {
+fun DrumPadView(modifier: Modifier = Modifier, onHit: (Int) -> Unit = {}) {
     val view = LocalView.current
 
     Column(
@@ -65,8 +64,7 @@ fun DrumPadView(modifier: Modifier = Modifier, sampler: DrumSampler? = null) {
                         modifier = Modifier.weight(1f).fillMaxHeight(),
                         onHit = {
                             view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                            if (sampler != null) sampler.play(pad.pitch)
-                            else ToneGenerator.playDrum(pad.pitch)
+                            onHit(pad.pitch)
                         }
                     )
                 }

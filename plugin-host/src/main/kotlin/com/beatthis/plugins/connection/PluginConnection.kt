@@ -28,7 +28,7 @@ class PluginConnection(private val context: Context) {
             override fun onServiceConnected(name: ComponentName, binder: IBinder) {
                 val bound = BoundPlugin(plugin, binder, this)
                 activeConnections[plugin.pluginId] = bound
-                cont.resume(bound)
+                if (cont.isActive) cont.resume(bound)
             }
 
             override fun onServiceDisconnected(name: ComponentName) {
