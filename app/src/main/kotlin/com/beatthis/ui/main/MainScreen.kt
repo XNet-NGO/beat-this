@@ -522,7 +522,7 @@ private fun PluginsStudioView(pluginHost: com.beatthis.plugins.host.PluginHost) 
                                             getParameterCount: function() { return this.params.length; },
                                             getParameter: function(i) {
                                                 var p = this.params[i];
-                                                return { getName:function(){return p.name}, getMinValue:function(){return p.min}, getMaxValue:function(){return p.max}, getDefaultValue:function(){return p.def} };
+                                                return { getId:function(){return i}, getName:function(){return p.name}, getMinValue:function(){return p.min}, getMaxValue:function(){return p.max}, getDefaultValue:function(){return p.def} };
                                             },
                                             setParameter: function(i, v) {},
                                             sendMidi1: function(data, offset, len) {},
