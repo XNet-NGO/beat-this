@@ -14,6 +14,8 @@ class DrumSampler(context: Context) {
     private var loaded = false
 
     init {
+        // Instrument needs an AudioChannel to produce output
+        instrument.audioChannel = AudioChannel(1f)
         samplePaths = DrumKitGenerator.ensureKit(context)
         loadAll()
     }
@@ -33,5 +35,6 @@ class DrumSampler(context: Context) {
         val sample = SampleManager.getSample(key) ?: return
         val event = SampleEvent(instrument)
         event.setSample(sample)
+        event.play()
     }
 }

@@ -47,22 +47,12 @@ dependencies {
     implementation(project(":mwengine"))
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
 
-    // UniversalMarkdown
+    // UniversalMarkdown (AARs + transitive Maven deps)
+    implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar"))))
     implementation("com.atlassian.commonmark:commonmark:0.15.2")
-    implementation("com.atlassian.commonmark:commonmark-ext-gfm-tables:0.15.2")
-    implementation("com.atlassian.commonmark:commonmark-ext-gfm-strikethrough:0.15.2")
-    implementation("com.atlassian.commonmark:commonmark-ext-autolink:0.15.2")
-    implementation(files("libs/universal-markdown-compose.aar"))
-    implementation(files("libs/fluid-markdown.aar"))
-    implementation(files("libs/markwon-core.aar"))
-    implementation(files("libs/markwon-ext-latex.aar"))
-    implementation(files("libs/markwon-ext-strikethrough.aar"))
-    implementation(files("libs/markwon-ext-tables.aar"))
-    implementation(files("libs/markwon-ext-tasklist.aar"))
-    implementation(files("libs/markwon-html.aar"))
-    implementation(files("libs/markwon-image.aar"))
-    implementation(files("libs/markwon-inline-parser.aar"))
-    implementation(files("libs/markwon-syntax-highlight.aar"))
+    implementation("ru.noties:jlatexmath-android:0.2.0")
+    implementation("ru.noties:jlatexmath-android-font-cyrillic:0.2.0")
+    implementation("ru.noties:jlatexmath-android-font-greek:0.2.0")
 
     // Compose
     val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
