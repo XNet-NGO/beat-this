@@ -11,16 +11,12 @@ class DrumSampler(context: Context) {
 
     private val instrument = SampledInstrument()
     private val events = mutableMapOf<Int, SampleEvent>()
-    private val samplePaths: Map<Int, String>
 
     init {
-        instrument.audioChannel = AudioChannel(1f)
-        samplePaths = DrumKitGenerator.ensureKit(context)
-        loadAll()
-    }
-
-    private fun loadAll() {
-        samplePaths.forEach { (pitch, path) ->
+        // Large max buffer so playback doesn't stop after a few hits
+        instrument.audioChannel = AudioChannel(1f, Int.MAX_VALUE)
+        val paths = DrumKitGenerator.ensureKit(context)
+        paths.forEach { (pitch, path) ->
             val key = "drum_$pitch"
             if (JavaUtilities.createSampleFromFile(key, path)) {
                 val sample = SampleManager.getSample(key) ?: return@forEach
@@ -31,7 +27,7 @@ class DrumSampler(context: Context) {
         }
     }
 
-    /** Trigger a drum hit by MIDI pitch — replays from start */
+    /** Trigger a drum hit by MIDI pitch */
     fun play(pitch: Int) {
         events[pitch]?.play()
     }
