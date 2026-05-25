@@ -524,13 +524,25 @@ private fun PluginsStudioView(pluginHost: com.beatthis.plugins.host.PluginHost) 
                                                 var p = this.params[i];
                                                 return { getId:function(){return i}, getName:function(){return p.name}, getMinValue:function(){return p.min}, getMaxValue:function(){return p.max}, getDefaultValue:function(){return p.def} };
                                             },
-                                            setParameter: function(i, v) {},
-                                            sendMidi1: function(data, offset, len) {},
+                                            setParameter: function(i, v) { AAPBridge.setParameter(i, parseFloat(v)); },
+                                            sendMidi1: function(data, offset, len) { AAPBridge.sendMidi(data[0], data[1], data[2] || 0); },
                                             onInitialize: function() {},
                                             onShow: function() {},
                                             onCleanup: function() {}
                                         };
                                     """.trimIndent()
+
+                                    // Bridge JS calls to Kotlin
+                                    addJavascriptInterface(object {
+                                        @android.webkit.JavascriptInterface
+                                        fun setParameter(index: Int, value: Float) {
+                                            pluginHost.setParameter(inst.id, index, value)
+                                        }
+                                        @android.webkit.JavascriptInterface
+                                        fun sendMidi(status: Int, data1: Int, data2: Int) {
+                                            pluginHost.sendMidi(inst.id, status, data1, data2)
+                                        }
+                                    }, "AAPBridge")
 
                                     // Inject before index.html by prepending to the HTML
                                     val indexHtml = zipContents["index.html"]?.decodeToString() ?: ""
