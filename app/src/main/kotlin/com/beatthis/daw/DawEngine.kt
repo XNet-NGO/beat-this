@@ -179,6 +179,22 @@ class DawEngine(private val context: Context) : MWEngine.IObserver {
 
     // --- EVENTS ---
 
+    private val liveEvents = mutableMapOf<Int, SynthEvent>()
+
+    /** Play a note immediately (live from keyboard) */
+    fun noteOn(trackId: Int, pitch: Int) {
+        val track = getTrack(trackId) ?: return
+        val instrument = instruments.getOrNull(track.instrumentIndex) as? SynthInstrument ?: return
+        val freq = (440.0 * Math.pow(2.0, (pitch - 69) / 12.0)).toFloat()
+        val event = SynthEvent(freq, instrument)
+        liveEvents[pitch] = event
+    }
+
+    /** Stop a live note */
+    fun noteOff(pitch: Int) {
+        liveEvents.remove(pitch)?.let { it.delete() }
+    }
+
     fun addSynthNote(trackId: Int, pitch: Int, step: Int, duration: Int = 1, velocity: Int = 100) {
         val track = getTrack(trackId) ?: return
         val instrument = instruments.getOrNull(track.instrumentIndex) as? SynthInstrument ?: return

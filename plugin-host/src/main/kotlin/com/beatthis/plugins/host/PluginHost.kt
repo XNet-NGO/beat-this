@@ -72,31 +72,24 @@ class PluginHost(context: Context) {
     fun setParameter(instanceId: String, paramId: Int, value: Float) {
         val instance = _instances.value.find { it.id == instanceId } ?: return
         instance.paramValues[paramId] = value
-        // Forward to service via Binder transact
-        try {
-            val data = android.os.Parcel.obtain()
-            val reply = android.os.Parcel.obtain()
-            data.writeInt(paramId)
-            data.writeFloat(value)
-            instance.bound.binder.transact(1001, data, reply, 0)
-            data.recycle()
-            reply.recycle()
-        } catch (_: Exception) {}
     }
 
-    /** Send MIDI message to plugin */
+    /** Send MIDI message — routes through callback for audio */
     fun sendMidi(instanceId: String, status: Int, data1: Int, data2: Int) {
         val instance = _instances.value.find { it.id == instanceId } ?: return
-        try {
-            val data = android.os.Parcel.obtain()
-            val reply = android.os.Parcel.obtain()
-            data.writeInt(status)
-            data.writeInt(data1)
-            data.writeInt(data2)
-            instance.bound.binder.transact(1002, data, reply, 0)
-            data.recycle()
-            reply.recycle()
-        } catch (_: Exception) {}
+        val trackId = instance.trackId
+        val command = status and 0xF0
+        when (command) {
+            0x90 -> if (data2 > 0) midiCallback?.onNoteOn(trackId, data1, data2) else midiCallback?.onNoteOff(data1)
+            0x80 -> midiCallback?.onNoteOff(data1)
+        }
+    }
+
+    var midiCallback: MidiCallback? = null
+
+    interface MidiCallback {
+        fun onNoteOn(trackId: Int, pitch: Int, velocity: Int)
+        fun onNoteOff(pitch: Int)
     }
 
     /** Get parameter value */

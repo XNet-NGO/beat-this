@@ -26,7 +26,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val mic = MicCapture(app)
     val dawEngine = DawEngine(app).also { it.init() }
     private val voiceExecutor = VoiceCommandExecutor(dawEngine)
-    val pluginHost = PluginHost(app)
+    val pluginHost = PluginHost(app).also {
+        it.midiCallback = object : PluginHost.MidiCallback {
+            override fun onNoteOn(trackId: Int, pitch: Int, velocity: Int) = dawEngine.noteOn(trackId, pitch)
+            override fun onNoteOff(pitch: Int) = dawEngine.noteOff(pitch)
+        }
+    }
 
     private val _status = MutableStateFlow("")
     val status = _status.asStateFlow()
