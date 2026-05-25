@@ -442,127 +442,18 @@ private fun PluginsStudioView(pluginHost: com.beatthis.plugins.host.PluginHost) 
                                 Icon(Icons.Default.Close, null, Modifier.size(16.dp))
                             }
                         }
-                        // Render plugin UI via WebView (loads from plugin's ContentProvider)
+                        // Render plugin's native UI via SurfaceControl (cross-process)
                         androidx.compose.ui.viewinterop.AndroidView(
                             factory = { ctx ->
-                                android.webkit.WebView(ctx).apply {
-                                    settings.javaScriptEnabled = true
-                                    settings.domStorageEnabled = true
-                                    settings.allowContentAccess = true
-                                    val pkg = inst.plugin.packageName
-                                    val params = inst.plugin.parameters
-
-                                    // Cache zip contents in memory
-                                    val zipContents = mutableMapOf<String, ByteArray>()
-                                    try {
-                                        val zipUri = android.net.Uri.parse("content://$pkg.aap_zip_provider/org.androidaudioplugin.ui.web/web-ui.zip")
-                                        val pfd = ctx.contentResolver.openFile(zipUri, "r", null)
-                                        if (pfd != null) {
-                                            val zipStream = java.util.zip.ZipInputStream(java.io.FileInputStream(pfd.fileDescriptor))
-                                            var entry = zipStream.nextEntry
-                                            while (entry != null) {
-                                                if (!entry.isDirectory) {
-                                                    zipContents[entry.name] = zipStream.readBytes()
-                                                }
-                                                zipStream.closeEntry()
-                                                entry = zipStream.nextEntry
-                                            }
-                                            zipStream.close()
-                                            pfd.close()
-                                        }
-                                    } catch (_: Exception) {}
-
-                                    webViewClient = object : android.webkit.WebViewClient() {
-                                        override fun shouldInterceptRequest(view: android.webkit.WebView, request: android.webkit.WebResourceRequest): android.webkit.WebResourceResponse? {
-                                            val url = request.url.toString()
-                                            if (url.contains("appassets.androidplatform.net/zip/")) {
-                                                var path = url.substringAfter("/zip/")
-                                                // Handle typo in Hera's HTML
-                                                if (path == "webcoomponents-lite.js") path = "webcomponents-lite.js"
-                                                val data = zipContents[path]
-                                                if (data != null) {
-                                                    val mime = when {
-                                                        path.endsWith(".html") -> "text/html"
-                                                        path.endsWith(".js") -> "application/javascript"
-                                                        path.endsWith(".css") -> "text/css"
-                                                        path.endsWith(".png") -> "image/png"
-                                                        else -> "application/octet-stream"
-                                                    }
-                                                    return android.webkit.WebResourceResponse(mime, "UTF-8", java.io.ByteArrayInputStream(data))
-                                                }
-                                            }
-                                            return null
-                                        }
-
-                                        override fun onPageFinished(view: android.webkit.WebView, url: String?) {
-                                            // Inject AAPInterop after page loads (before initialize() runs we inject via evaluateJavascript)
-                                        }
-                                    }
-
-                                    // Inject AAPInterop JS interface before page loads
-                                    // Hera has 26 params (discovered from its native UI)
-                                    val heraParams = listOf(
-                                        "VCA depth","VCA type","DCO PWM depth","DCO PWM modulator",
-                                        "DCO saw level","DCO pulse level","DCO sub level","DCO noise level",
-                                        "DCO range","DCO pitch mod depth","VCF cutoff","VCF resonance",
-                                        "VCF envelope mod depth","VCF LFO mod depth","VCF keyboard mod depth","VCF bend depth",
-                                        "Envelope attack","Envelope decay","Envelope sustain","Envelope release",
-                                        "LFO trigger mode","LFO rate","LFO delay","HPF","Chorus I","Chorus II"
-                                    )
-                                    val effectiveParams = if (params.isNotEmpty()) params else heraParams.mapIndexed { i, name ->
-                                        com.beatthis.plugins.discovery.ParamInfo(i, name, 0.0, 1.0, 0.5)
-                                    }
-
-                                    val paramJson = effectiveParams.joinToString(",") { p ->
-                                        "{name:'${p.name.replace("'", "\\'")}',min:${p.min},max:${p.max},def:${p.default}}"
-                                    }
-                                    val initScript = """
-                                        var AAPInterop = {
-                                            params: [$paramJson],
-                                            getParameterCount: function() { return this.params.length; },
-                                            getParameter: function(i) {
-                                                var p = this.params[i];
-                                                return { getId:function(){return i}, getName:function(){return p.name}, getMinValue:function(){return p.min}, getMaxValue:function(){return p.max}, getDefaultValue:function(){return p.def} };
-                                            },
-                                            setParameter: function(i, v) { AAPBridge.setParameter(i, parseFloat(v)); },
-                                            sendMidi1: function(data, offset, len) { AAPBridge.sendMidi(data[0], data[1], data[2] || 0); },
-                                            onInitialize: function() {},
-                                            onShow: function() {},
-                                            onCleanup: function() {}
-                                        };
-                                    """.trimIndent()
-
-                                    // Bridge JS calls to Kotlin
-                                    addJavascriptInterface(object {
-                                        @android.webkit.JavascriptInterface
-                                        fun setParameter(index: Int, value: Float) {
-                                            pluginHost.setParameter(inst.id, index, value)
-                                        }
-                                        @android.webkit.JavascriptInterface
-                                        fun sendMidi(status: Int, data1: Int, data2: Int) {
-                                            pluginHost.sendMidi(inst.id, status, data1, data2)
-                                        }
-                                    }, "AAPBridge")
-
-                                    // Inject before index.html by prepending to the HTML
-                                    val indexHtml = zipContents["index.html"]?.decodeToString() ?: ""
-                                    val modifiedHtml = indexHtml.replace("<head>", "<head><script>$initScript</script>")
-                                    zipContents["index.html"] = modifiedHtml.toByteArray()
-
-                                    // Log JS errors
-                                    webChromeClient = object : android.webkit.WebChromeClient() {
-                                        override fun onConsoleMessage(msg: android.webkit.ConsoleMessage): Boolean {
-                                            android.util.Log.d("PluginWebUI", "${msg.messageLevel()}: ${msg.message()} [${msg.lineNumber()}]")
-                                            return true
-                                        }
-                                    }
-
-                                    if (zipContents.isEmpty()) {
-                                        loadData("<html><body style='color:white;padding:16px'><h3>Web UI zip empty</h3><p>ContentProvider returned no data</p></body></html>", "text/html", "UTF-8")
-                                    } else {
-                                        loadUrl("https://appassets.androidplatform.net/zip/index.html")
-                                    }
-                                }
+                                val client = org.androidaudioplugin.hosting.AudioPluginSurfaceControlClient(ctx)
+                                val view = client.surfaceView
+                                client.connectUIAsync(
+                                    inst.plugin.packageName,
+                                    inst.plugin.pluginId,
+                                    inst.slotIndex,
+                                    800, 1200
+                                )
+                                view ?: android.view.View(ctx)
                             },
                             modifier = Modifier.fillMaxSize()
                         )
