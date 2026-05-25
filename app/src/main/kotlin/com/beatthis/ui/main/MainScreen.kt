@@ -417,7 +417,6 @@ private fun PluginsStudioView(pluginHost: com.beatthis.plugins.host.PluginHost) 
     val instances by pluginHost.instances.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
     var expandedInstance by remember { mutableStateOf<com.beatthis.plugins.host.PluginInstance?>(null) }
-    val loader = remember { com.beatthis.plugins.host.InProcessPluginLoader(context) }
 
     if (instances.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -443,24 +442,55 @@ private fun PluginsStudioView(pluginHost: com.beatthis.plugins.host.PluginHost) 
                                 Icon(Icons.Default.Close, null, Modifier.size(16.dp))
                             }
                         }
-                        // Render plugin's native View in-process
+                        // Render plugin UI via WebView (loads from plugin's ContentProvider)
                         val viewFactory = inst.plugin.uiViewFactory
-                            ?: "org.androidaudioplugin.juce.JuceAudioPluginViewFactory" // known default for JUCE AAP plugins
+                            ?: "org.androidaudioplugin.juce.JuceAudioPluginViewFactory"
                         androidx.compose.ui.viewinterop.AndroidView(
                             factory = { ctx ->
-                                try {
-                                    loader.createPluginView(
-                                        inst.plugin.packageName,
-                                        inst.plugin.pluginId,
-                                        inst.slotIndex,
-                                        viewFactory
-                                    )
-                                } catch (e: Exception) {
-                                    android.widget.TextView(ctx).apply {
-                                        text = "Failed to load native UI:\n${e.message}\n\n${e.cause?.message ?: ""}"
-                                        setPadding(32, 32, 32, 32)
-                                        setTextColor(android.graphics.Color.WHITE)
+                                android.webkit.WebView(ctx).apply {
+                                    settings.javaScriptEnabled = true
+                                    settings.domStorageEnabled = true
+                                    settings.allowContentAccess = true
+                                    val pkg = inst.plugin.packageName
+                                    // AAP plugins serve web UI via ContentProvider
+                                    val providerUri = "content://$pkg.aap_zip_provider/org.androidaudioplugin.ui.web/web-ui.zip"
+                                    // Use WebViewAssetLoader pattern with custom path handler
+                                    webViewClient = object : android.webkit.WebViewClient() {
+                                        override fun shouldInterceptRequest(view: android.webkit.WebView, request: android.webkit.WebResourceRequest): android.webkit.WebResourceResponse? {
+                                            val url = request.url.toString()
+                                            if (url.contains("/zip/")) {
+                                                try {
+                                                    val path = url.substringAfter("/zip/")
+                                                    val zipUri = android.net.Uri.parse("content://$pkg.aap_zip_provider/org.androidaudioplugin.ui.web/web-ui.zip")
+                                                    val pfd = ctx.contentResolver.openFile(zipUri, "r", null)
+                                                    if (pfd != null) {
+                                                        val zipStream = java.util.zip.ZipInputStream(java.io.FileInputStream(pfd.fileDescriptor))
+                                                        var entry = zipStream.nextEntry
+                                                        while (entry != null) {
+                                                            if (entry.name == path || entry.name == path.removePrefix("/")) {
+                                                                val data = zipStream.readBytes()
+                                                                val mime = when {
+                                                                    path.endsWith(".html") -> "text/html"
+                                                                    path.endsWith(".js") -> "application/javascript"
+                                                                    path.endsWith(".css") -> "text/css"
+                                                                    path.endsWith(".png") -> "image/png"
+                                                                    path.endsWith(".svg") -> "image/svg+xml"
+                                                                    else -> "application/octet-stream"
+                                                                }
+                                                                pfd.close()
+                                                                return android.webkit.WebResourceResponse(mime, "UTF-8", java.io.ByteArrayInputStream(data))
+                                                            }
+                                                            zipStream.closeEntry()
+                                                            entry = zipStream.nextEntry
+                                                        }
+                                                        pfd.close()
+                                                    }
+                                                } catch (_: Exception) {}
+                                            }
+                                            return null
+                                        }
                                     }
+                                    loadUrl("https://appassets.androidplatform.net/zip/index.html")
                                 }
                             },
                             modifier = Modifier.fillMaxSize()
