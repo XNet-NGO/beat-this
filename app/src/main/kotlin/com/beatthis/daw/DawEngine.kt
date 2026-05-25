@@ -90,6 +90,12 @@ class DawEngine(private val context: Context) : MWEngine.IObserver {
         _currentStep.value = 0
     }
 
+    /** Skip back one bar (or to start if at bar 1) */
+    fun rewind() {
+        sequencer.rewind()
+        _currentStep.value = 0
+    }
+
     fun pause() {
         _isPlaying.value = false
         sequencer.setPlaying(false)
@@ -266,8 +272,15 @@ class DawEngine(private val context: Context) : MWEngine.IObserver {
 
     override fun handleNotification(id: Int, value: Int) {
         // SEQUENCER_POSITION_UPDATED
-        if (id == 6) { // SEQUENCER_POSITION_UPDATED
+        if (id == 6) {
             _currentStep.value = value
+            // Metronome click on each beat (every 4 steps)
+            if (_metronomeEnabled.value && value % 4 == 0) {
+                val accent = value % stepsPerMeasure == 0
+                com.beatthis.audio.ToneGenerator.playNote(
+                    if (accent) 84 else 80, 30, 0.3f
+                )
+            }
         }
     }
 

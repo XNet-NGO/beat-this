@@ -115,9 +115,13 @@ private fun TransportBar(engine: DawEngine, vm: MainViewModel) {
     Surface(color = MaterialTheme.colorScheme.surfaceVariant, tonalElevation = 2.dp) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                // Rewind
+                // Rewind (go to start)
+                IconButton(onClick = { engine.rewind() }, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.SkipPrevious, "Rewind", Modifier.size(18.dp))
+                }
+                // Stop
                 IconButton(onClick = { engine.stop() }, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.Default.SkipPrevious, null, Modifier.size(18.dp))
+                    Icon(Icons.Default.Stop, "Stop", Modifier.size(18.dp))
                 }
                 // Play/Pause
                 IconButton(onClick = { if (isPlaying) engine.pause() else engine.play() }, modifier = Modifier.size(36.dp)) {
@@ -143,9 +147,38 @@ private fun TransportBar(engine: DawEngine, vm: MainViewModel) {
                         tint = if (metronomeEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
 
-                // Tempo
-                Text("${tempo.toInt()}", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
-                Text("BPM", fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                // Tempo -
+                IconButton(onClick = { engine.setTempo(tempo - 5f) }, modifier = Modifier.size(24.dp)) {
+                    Icon(Icons.Default.Remove, null, Modifier.size(12.dp))
+                }
+                // Tempo display (tap to edit)
+                var editingTempo by remember { mutableStateOf(false) }
+                var tempoText by remember { mutableStateOf("") }
+                if (editingTempo) {
+                    androidx.compose.material3.OutlinedTextField(
+                        value = tempoText,
+                        onValueChange = { tempoText = it },
+                        modifier = Modifier.width(56.dp).height(32.dp),
+                        singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp),
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                        keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = {
+                            tempoText.toFloatOrNull()?.let { engine.setTempo(it) }
+                            editingTempo = false
+                        })
+                    )
+                } else {
+                    Text(
+                        "${tempo.toInt()} BPM",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.clickable { tempoText = "${tempo.toInt()}"; editingTempo = true }
+                    )
+                }
+                // Tempo +
+                IconButton(onClick = { engine.setTempo(tempo + 5f) }, modifier = Modifier.size(24.dp)) {
+                    Icon(Icons.Default.Add, null, Modifier.size(12.dp))
+                }
 
                 Spacer(Modifier.weight(1f))
 
