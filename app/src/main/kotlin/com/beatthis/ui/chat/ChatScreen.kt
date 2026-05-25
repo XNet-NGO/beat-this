@@ -143,7 +143,7 @@ private fun MessageBubble(msg: ChatMessage) {
                 if (content.isNotBlank()) {
                     if (isUser) Text(content, style = MaterialTheme.typography.bodyMedium)
                     else if (msg.status == MessageStatus.STREAMING) StreamingText(content)
-                    else SelectionContainer { FormattedText(content) }
+                    else SelectionContainer { com.fluid.compose.UniversalMarkdown(content = content, animateStreaming = false, modifier = Modifier.fillMaxWidth()) }
                 }
             }
         }

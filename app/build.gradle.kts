@@ -47,6 +47,11 @@ dependencies {
     implementation(project(":mwengine"))
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
 
+    // UniversalMarkdown
+    implementation(files("libs/universal-markdown-compose.aar"))
+    implementation(files("libs/fluid-markdown.aar"))
+    implementation("com.atlassian.commonmark:commonmark:0.15.2")
+
     // Compose
     val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
     implementation(composeBom)

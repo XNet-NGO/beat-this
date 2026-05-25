@@ -14,6 +14,15 @@ import kotlinx.coroutines.flow.asStateFlow
  */
 class PluginHost(private val context: Context) {
 
+    init {
+        // Initialize AAP JNI with application context
+        try {
+            val cls = Class.forName("org.androidaudioplugin.AudioPluginNatives")
+            val method = cls.getMethod("initializeAAPJni", Context::class.java)
+            method.invoke(null, context.applicationContext)
+        } catch (_: Exception) {}
+    }
+
     private val connection = PluginConnection(context)
     private val bridge = NativePluginBridge()
     private val nativeHosts = mutableMapOf<String, NativeAapHost>()
