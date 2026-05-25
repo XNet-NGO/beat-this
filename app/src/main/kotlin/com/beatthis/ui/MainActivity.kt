@@ -43,7 +43,6 @@ fun BeatThisApp(incomingIntent: Intent? = null) {
     val navController = rememberNavController()
     var selectedTab by remember { mutableIntStateOf(0) }
     val vm: MainViewModel = viewModel()
-    var textInput by remember { mutableStateOf("") }
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
     val context = androidx.compose.ui.platform.LocalContext.current
 
@@ -70,26 +69,6 @@ fun BeatThisApp(incomingIntent: Intent? = null) {
     Scaffold(
         bottomBar = {
             Column {
-                // Command bar only on Studio tab
-                if (currentRoute == "studio") {
-                    Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 1.dp) {
-                        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                            OutlinedTextField(
-                                value = textInput,
-                                onValueChange = { textInput = it },
-                                placeholder = { Text("Type command...") },
-                                modifier = Modifier.weight(1f).height(40.dp),
-                                singleLine = true,
-                                textStyle = MaterialTheme.typography.bodySmall
-                            )
-                            IconButton(onClick = {
-                                if (textInput.isNotBlank()) { vm.textCommand(textInput); textInput = "" }
-                            }, modifier = Modifier.size(36.dp)) {
-                                Icon(Icons.Default.Send, null)
-                            }
-                        }
-                    }
-                }
                 NavigationBar {
                     tabs.forEachIndexed { i, (route, label, icon) ->
                         NavigationBarItem(
