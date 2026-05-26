@@ -55,7 +55,7 @@ fun MainScreen(vm: MainViewModel) {
             StudioView.PIANO_ROLL -> {
                 val importedNotes by vm.pianoNotes.collectAsState()
                 val lengthBars by vm.pianoLengthBars.collectAsState()
-                PianoRollView(importedNotes = importedNotes, lengthBars = lengthBars, modifier = Modifier.fillMaxSize())
+                PianoRollView(engine = engine, importedNotes = importedNotes, lengthBars = lengthBars, onNotesChanged = { vm.syncPianoNotes(it) }, modifier = Modifier.fillMaxSize())
             }
             StudioView.DRUMS -> {
                 var showPads by remember { mutableStateOf(true) }

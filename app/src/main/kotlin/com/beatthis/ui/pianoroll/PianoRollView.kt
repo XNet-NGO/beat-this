@@ -11,28 +11,35 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.beatthis.audio.ToneGenerator
+import com.beatthis.daw.DawEngine
 import com.beatthis.engine.midi.Note
 import com.beatthis.engine.midi.Pattern
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 
-enum class EditTool { DRAW, ERASE, SELECT }
+enum class EditTool { DRAW, ERASE, SELECT, VELOCITY }
+enum class SnapValue(val ticks: Int, val label: String) {
+    BAR(Pattern.TICKS_PER_BAR, "1 Bar"),
+    BEAT(Pattern.TICKS_PER_BEAT, "1/4"),
+    EIGHTH(Pattern.TICKS_PER_BEAT / 2, "1/8"),
+    SIXTEENTH(Pattern.TICKS_PER_BEAT / 4, "1/16"),
+    THIRTYSECOND(Pattern.TICKS_PER_BEAT / 8, "1/32"),
+    OFF(1, "Off"),
+}
 
 @Composable
 fun PianoRollView(
+    engine: DawEngine,
     importedNotes: List<Note> = emptyList(),
     lengthBars: Int = 4,
+    onNotesChanged: (List<Note>) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val noteRange = 36..96
@@ -40,58 +47,77 @@ fun PianoRollView(
     val keyH = 18.dp
     val beatW = 40.dp
     val totalBeats = lengthBars * 4
-    val quantize = 120 // 1/8th note in ticks
 
     val hScroll = rememberScrollState()
     val vScroll = rememberScrollState()
-    val density = LocalDensity.current
 
     var notes by remember(importedNotes) { mutableStateOf(importedNotes) }
     var tool by remember { mutableStateOf(EditTool.DRAW) }
-    var isPlaying by remember { mutableStateOf(false) }
-    var playheadTick by remember { mutableIntStateOf(0) }
-    var bpm by remember { mutableStateOf("120") }
+    var snap by remember { mutableStateOf(SnapValue.EIGHTH) }
     var selectedNote by remember { mutableStateOf<Note?>(null) }
+    var showSnapMenu by remember { mutableStateOf(false) }
 
-    // Playback
-    LaunchedEffect(isPlaying) {
-        if (!isPlaying) return@LaunchedEffect
-        val tempo = bpm.toFloatOrNull() ?: 120f
-        val tickMs = 60_000.0 / tempo / Pattern.TICKS_PER_BEAT
-        val totalTicks = lengthBars * Pattern.TICKS_PER_BAR
-        playheadTick = 0
-        while (isActive && isPlaying) {
-            // Play notes at current tick
-            notes.filter { it.startTick == playheadTick }.forEach { ToneGenerator.playNote(it.pitch, 150) }
-            delay((tickMs * 10).toLong()) // advance 10 ticks at a time
-            playheadTick = (playheadTick + 10) % totalTicks
-        }
-    }
+    val isPlaying by engine.isPlaying.collectAsState()
+    val currentStep by engine.currentStep.collectAsState()
+    val tempo by engine.tempo.collectAsState()
+
+    // Sync notes to engine when changed
+    LaunchedEffect(notes) { onNotesChanged(notes) }
+
+    // Convert engine step to tick for playhead
+    val playheadTick = currentStep * (Pattern.TICKS_PER_BEAT / 4) // steps are 16th notes
+
+    fun quantize(tick: Int): Int = (tick / snap.ticks) * snap.ticks
 
     Column(modifier.fillMaxSize()) {
         // Toolbar
         Surface(color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.fillMaxWidth()) {
             Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                // Play/Stop
-                IconButton(onClick = { isPlaying = !isPlaying }, modifier = Modifier.size(32.dp)) {
+                // Transport
+                IconButton(onClick = { if (isPlaying) engine.stop() else engine.play() }, modifier = Modifier.size(32.dp)) {
                     Icon(if (isPlaying) Icons.Default.Stop else Icons.Default.PlayArrow, null, Modifier.size(18.dp))
                 }
-                // BPM
-                OutlinedTextField(value = bpm, onValueChange = { bpm = it }, modifier = Modifier.width(60.dp).height(36.dp), singleLine = true, textStyle = LocalTextStyle.current.copy(fontSize = 11.sp))
+                Text("${tempo.toInt()}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
                 Spacer(Modifier.width(8.dp))
 
                 // Tools
-                FilterChip(selected = tool == EditTool.DRAW, onClick = { tool = EditTool.DRAW }, label = { Text("✏️", fontSize = 12.sp) }, modifier = Modifier.height(28.dp))
-                FilterChip(selected = tool == EditTool.ERASE, onClick = { tool = EditTool.ERASE }, label = { Text("🗑", fontSize = 12.sp) }, modifier = Modifier.height(28.dp))
-                FilterChip(selected = tool == EditTool.SELECT, onClick = { tool = EditTool.SELECT }, label = { Text("👆", fontSize = 12.sp) }, modifier = Modifier.height(28.dp))
+                IconButton(onClick = { tool = EditTool.DRAW }, modifier = Modifier.size(28.dp), colors = IconButtonDefaults.iconButtonColors(containerColor = if (tool == EditTool.DRAW) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)) {
+                    Icon(Icons.Default.Edit, null, Modifier.size(16.dp))
+                }
+                IconButton(onClick = { tool = EditTool.ERASE }, modifier = Modifier.size(28.dp), colors = IconButtonDefaults.iconButtonColors(containerColor = if (tool == EditTool.ERASE) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)) {
+                    Icon(Icons.Default.Delete, null, Modifier.size(16.dp))
+                }
+                IconButton(onClick = { tool = EditTool.SELECT }, modifier = Modifier.size(28.dp), colors = IconButtonDefaults.iconButtonColors(containerColor = if (tool == EditTool.SELECT) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)) {
+                    Icon(Icons.Default.TouchApp, null, Modifier.size(16.dp))
+                }
+                IconButton(onClick = { tool = EditTool.VELOCITY }, modifier = Modifier.size(28.dp), colors = IconButtonDefaults.iconButtonColors(containerColor = if (tool == EditTool.VELOCITY) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)) {
+                    Icon(Icons.Default.Speed, null, Modifier.size(16.dp))
+                }
+
+                Spacer(Modifier.width(4.dp))
+
+                // Snap
+                Box {
+                    FilterChip(selected = true, onClick = { showSnapMenu = true }, label = { Text(snap.label, fontSize = 10.sp) }, modifier = Modifier.height(26.dp))
+                    DropdownMenu(expanded = showSnapMenu, onDismissRequest = { showSnapMenu = false }) {
+                        SnapValue.entries.forEach { s ->
+                            DropdownMenuItem(text = { Text(s.label) }, onClick = { snap = s; showSnapMenu = false })
+                        }
+                    }
+                }
 
                 Spacer(Modifier.weight(1f))
 
-                // Note count
-                Text("${notes.size} notes", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                // Quantize all
+                IconButton(onClick = {
+                    notes = notes.map { it.copy(startTick = quantize(it.startTick), durationTicks = snap.ticks.coerceAtLeast(it.durationTicks)) }
+                }, modifier = Modifier.size(28.dp)) {
+                    Icon(Icons.Default.GridOn, "Quantize", Modifier.size(16.dp))
+                }
 
-                // Clear
+                Text("${notes.size}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
                 IconButton(onClick = { notes = emptyList(); selectedNote = null }, modifier = Modifier.size(28.dp)) {
                     Icon(Icons.Default.DeleteSweep, null, Modifier.size(16.dp))
                 }
@@ -103,11 +129,7 @@ fun PianoRollView(
             for (beat in 0 until totalBeats) {
                 Box(Modifier.width(beatW).height(16.dp)) {
                     val isBar = beat % 4 == 0
-                    Text(
-                        if (isBar) "${beat / 4 + 1}" else "·",
-                        fontSize = 9.sp,
-                        color = if (isBar) MaterialTheme.colorScheme.onSurface else Color.Gray
-                    )
+                    Text(if (isBar) "${beat / 4 + 1}" else "·", fontSize = 9.sp, color = if (isBar) MaterialTheme.colorScheme.onSurface else Color.Gray)
                 }
             }
         }
@@ -120,9 +142,7 @@ fun PianoRollView(
                     val isBlack = pitch % 12 in listOf(1, 3, 6, 8, 10)
                     val isC = pitch % 12 == 0
                     Box(
-                        Modifier
-                            .height(keyH)
-                            .fillMaxWidth()
+                        Modifier.height(keyH).fillMaxWidth()
                             .background(if (isBlack) Color(0xFF1A1A1A) else if (isC) Color(0xFF555555) else Color(0xFF3A3A3A))
                             .border(0.5.dp, Color(0xFF111111))
                             .clickable { ToneGenerator.playNote(pitch, 300) },
@@ -136,31 +156,27 @@ fun PianoRollView(
                 }
             }
 
-            // Note grid canvas
+            // Grid canvas
             Box(Modifier.weight(1f).horizontalScroll(hScroll).verticalScroll(vScroll)) {
                 val canvasW = beatW * totalBeats
                 val canvasH = keyH * totalKeys
 
                 Canvas(
-                    Modifier
-                        .width(canvasW)
-                        .height(canvasH)
-                        .pointerInput(tool, notes) {
+                    Modifier.width(canvasW).height(canvasH)
+                        .pointerInput(tool, notes, snap) {
                             detectTapGestures { offset ->
                                 val tickW = beatW.toPx() / Pattern.TICKS_PER_BEAT
                                 val keyHPx = keyH.toPx()
-                                val tick = (offset.x / tickW).toInt()
+                                val rawTick = (offset.x / tickW).toInt()
                                 val pitch = noteRange.last - (offset.y / keyHPx).toInt()
                                 if (pitch !in noteRange) return@detectTapGestures
-
-                                val qTick = (tick / quantize) * quantize
+                                val qTick = quantize(rawTick)
 
                                 when (tool) {
                                     EditTool.DRAW -> {
                                         val existing = notes.find { it.pitch == pitch && qTick >= it.startTick && qTick < it.startTick + it.durationTicks }
                                         if (existing == null) {
-                                            val note = Note(pitch, qTick, quantize * 2, 90)
-                                            notes = notes + note
+                                            notes = notes + Note(pitch, qTick, snap.ticks * 2, 90)
                                             ToneGenerator.playNote(pitch, 150)
                                         }
                                     }
@@ -171,6 +187,30 @@ fun PianoRollView(
                                     EditTool.SELECT -> {
                                         selectedNote = notes.find { it.pitch == pitch && qTick >= it.startTick && qTick < it.startTick + it.durationTicks }
                                     }
+                                    EditTool.VELOCITY -> {
+                                        val hit = notes.find { it.pitch == pitch && qTick >= it.startTick && qTick < it.startTick + it.durationTicks }
+                                        if (hit != null) {
+                                            val newVel = ((offset.y % keyHPx) / keyHPx * 127).toInt().coerceIn(1, 127)
+                                            notes = notes.map { if (it === hit) it.copy(velocity = newVel) else it }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        .pointerInput(tool, notes, snap) {
+                            if (tool != EditTool.SELECT) return@pointerInput
+                            detectDragGestures { change, dragAmount ->
+                                val sel = selectedNote ?: return@detectDragGestures
+                                val tickW = beatW.toPx() / Pattern.TICKS_PER_BEAT
+                                val keyHPx = keyH.toPx()
+                                val dTick = (dragAmount.x / tickW).toInt()
+                                val dPitch = -(dragAmount.y / keyHPx).toInt()
+                                if (dTick != 0 || dPitch != 0) {
+                                    val newTick = (sel.startTick + dTick).coerceAtLeast(0)
+                                    val newPitch = (sel.pitch + dPitch).coerceIn(noteRange)
+                                    val moved = sel.copy(startTick = quantize(newTick), pitch = newPitch)
+                                    notes = notes.map { if (it === sel) moved else it }
+                                    selectedNote = moved
                                 }
                             }
                         }
@@ -178,7 +218,7 @@ fun PianoRollView(
                     val tickW = beatW.toPx() / Pattern.TICKS_PER_BEAT
                     val keyHPx = keyH.toPx()
 
-                    // Background grid
+                    // Background
                     for (i in 0..totalKeys) {
                         val y = i * keyHPx
                         val p = noteRange.last - i
@@ -191,17 +231,16 @@ fun PianoRollView(
                     for (beat in 0..totalBeats) {
                         val x = beat * beatW.toPx()
                         val isBar = beat % 4 == 0
-                        drawLine(
-                            if (isBar) Color(0xFF444444) else Color(0xFF222222),
-                            Offset(x, 0f), Offset(x, size.height),
-                            strokeWidth = if (isBar) 1.5f else 0.5f
-                        )
+                        drawLine(if (isBar) Color(0xFF444444) else Color(0xFF222222), Offset(x, 0f), Offset(x, size.height), strokeWidth = if (isBar) 1.5f else 0.5f)
                     }
 
-                    // Quantize grid (8th notes)
-                    for (tick in 0 until totalBeats * Pattern.TICKS_PER_BEAT step quantize) {
-                        val x = tick * tickW
-                        drawLine(Color(0xFF1A1A1A), Offset(x, 0f), Offset(x, size.height), strokeWidth = 0.3f)
+                    // Snap grid
+                    val snapTicks = snap.ticks
+                    if (snapTicks < Pattern.TICKS_PER_BEAT) {
+                        for (tick in 0 until totalBeats * Pattern.TICKS_PER_BEAT step snapTicks) {
+                            val x = tick * tickW
+                            drawLine(Color(0xFF1A1A1A), Offset(x, 0f), Offset(x, size.height), strokeWidth = 0.3f)
+                        }
                     }
 
                     // Playhead
@@ -217,12 +256,43 @@ fun PianoRollView(
                         val y = (noteRange.last - note.pitch) * keyHPx
                         val w = (note.durationTicks * tickW).coerceAtLeast(4f)
                         val isSelected = note == selectedNote
-                        val color = if (isSelected) Color(0xFFFF9800) else Color(0xFFBB86FC)
+                        val velBrightness = 0.4f + (note.velocity / 127f) * 0.6f
+                        val color = if (isSelected) Color(0xFFFF9800) else Color(0xFFBB86FC).copy(alpha = velBrightness)
                         drawRoundRect(color, Offset(x, y + 1), Size(w, keyHPx - 2), cornerRadius = CornerRadius(3f))
-                        // Velocity indicator (brightness)
-                        val velAlpha = note.velocity / 127f
-                        drawRoundRect(Color.White.copy(alpha = velAlpha * 0.3f), Offset(x, y + 1), Size(w, keyHPx - 2), cornerRadius = CornerRadius(3f))
                     }
+                }
+            }
+        }
+
+        // Velocity lane for selected note
+        selectedNote?.let { sel ->
+            Surface(color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+                Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Vel: ${sel.velocity}", fontSize = 11.sp, modifier = Modifier.width(50.dp))
+                    Slider(
+                        value = sel.velocity.toFloat(),
+                        onValueChange = { v ->
+                            val newVel = v.toInt()
+                            notes = notes.map { if (it == sel) it.copy(velocity = newVel) else it }
+                            selectedNote = sel.copy(velocity = newVel)
+                        },
+                        valueRange = 1f..127f,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("Dur: ${sel.durationTicks}", fontSize = 11.sp, modifier = Modifier.width(60.dp))
+                    Slider(
+                        value = sel.durationTicks.toFloat(),
+                        onValueChange = { d ->
+                            val newDur = (d.toInt() / snap.ticks) * snap.ticks
+                            if (newDur > 0) {
+                                notes = notes.map { if (it == sel) it.copy(durationTicks = newDur) else it }
+                                selectedNote = sel.copy(durationTicks = newDur)
+                            }
+                        },
+                        valueRange = snap.ticks.toFloat()..(Pattern.TICKS_PER_BAR * 2).toFloat(),
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
         }

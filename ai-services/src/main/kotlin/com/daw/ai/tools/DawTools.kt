@@ -83,6 +83,22 @@ object DawTools {
         }),
         tool("undo", "Undo the last action", params {}),
         tool("redo", "Redo the last undone action", params {}),
+        tool("add_note", "Add a MIDI note to a track's piano roll", params {
+            prop("track", "integer", "Track number")
+            prop("pitch", "integer", "MIDI pitch (0-127, 60=C4)")
+            prop("start_beat", "number", "Start position in beats (0-based)")
+            prop("duration_beats", "number", "Duration in beats (e.g. 0.5 = eighth note)")
+            prop("velocity", "integer", "Velocity 1-127 (default 90)")
+            required("track", "pitch", "start_beat", "duration_beats")
+        }),
+        tool("remove_notes", "Remove all notes from a track's piano roll", params {
+            prop("track", "integer", "Track number")
+            required("track")
+        }),
+        tool("set_pattern_length", "Set the piano roll pattern length in bars", params {
+            prop("bars", "integer", "Number of bars (1-16)")
+            required("bars")
+        }),
     )
 
     private fun tool(name: String, description: String, parameters: JsonObject) =

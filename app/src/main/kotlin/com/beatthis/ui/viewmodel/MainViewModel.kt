@@ -273,6 +273,29 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             "export_mixdown" -> { exportMixdown(); "Exporting mixdown" }
             "undo" -> "Undo not yet implemented"
             "redo" -> "Redo not yet implemented"
+            "add_note" -> {
+                val pitch = (args["pitch"] as? Number)?.toInt() ?: return "Missing pitch"
+                val startBeat = (args["start_beat"] as? Number)?.toDouble() ?: return "Missing start_beat"
+                val durBeats = (args["duration_beats"] as? Number)?.toDouble() ?: return "Missing duration_beats"
+                val velocity = (args["velocity"] as? Number)?.toInt() ?: 90
+                val startTick = (startBeat * com.beatthis.engine.midi.Pattern.TICKS_PER_BEAT).toInt()
+                val durTicks = (durBeats * com.beatthis.engine.midi.Pattern.TICKS_PER_BEAT).toInt()
+                val note = com.beatthis.engine.midi.Note(pitch, startTick, durTicks, velocity)
+                _pianoNotes.value = _pianoNotes.value + note
+                val maxTick = _pianoNotes.value.maxOfOrNull { it.startTick + it.durationTicks } ?: 0
+                _pianoLengthBars.value = ((maxTick / com.beatthis.engine.midi.Pattern.TICKS_PER_BAR) + 1).coerceAtLeast(_pianoLengthBars.value)
+                val names = arrayOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
+                "Added ${names[pitch % 12]}${pitch / 12 - 1} at beat $startBeat (${durBeats} beats)"
+            }
+            "remove_notes" -> {
+                _pianoNotes.value = emptyList()
+                "Cleared all notes from piano roll"
+            }
+            "set_pattern_length" -> {
+                val bars = (args["bars"] as? Number)?.toInt()?.coerceIn(1, 16) ?: 4
+                _pianoLengthBars.value = bars
+                "Pattern length set to $bars bars"
+            }
             else -> "Unknown tool: $name"
         }
     }
@@ -291,6 +314,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val maxTick = notes.maxOfOrNull { it.startTick + it.durationTicks } ?: 0
         _pianoLengthBars.value = ((maxTick / com.beatthis.engine.midi.Pattern.TICKS_PER_BAR) + 1).coerceAtLeast(4)
         _status.value = "✓ Loaded ${notes.size} notes to Piano Roll"
+    }
+
+    /** Sync notes from piano roll back to engine */
+    fun syncPianoNotes(notes: List<com.beatthis.engine.midi.Note>) {
+        _pianoNotes.value = notes
     }
 
     fun askComposition(prompt: String) {
